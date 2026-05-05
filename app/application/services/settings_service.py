@@ -24,11 +24,17 @@ class AppSettings:
     cpu_limit_percent: int = 60
     heuristics_enabled: bool = True
     heuristic_rules: dict[str, bool] | None = None
+    ui_theme: str = "dark"
 
 
 class SettingsService:
     def __init__(self, repo: SettingsRepositoryPort) -> None:
         self._repo = repo
+
+    @staticmethod
+    def _normalize_theme(value: str | None) -> str:
+        theme = str(value or "dark").strip().lower()
+        return "light" if theme == "light" else "dark"
 
     def load(self) -> AppSettings:
         raw = self._repo.load()
@@ -48,6 +54,7 @@ class SettingsService:
             cpu_limit_percent=int(raw.get("cpu_limit_percent", 60)),
             heuristics_enabled=bool(raw.get("heuristics_enabled", True)),
             heuristic_rules=dict(raw.get("heuristic_rules", {})) if isinstance(raw.get("heuristic_rules", {}), dict) else {},
+            ui_theme=self._normalize_theme(raw.get("ui_theme", "dark")),
         )
 
     def save(self, settings: AppSettings) -> None:
@@ -68,5 +75,6 @@ class SettingsService:
                 "cpu_limit_percent": settings.cpu_limit_percent,
                 "heuristics_enabled": settings.heuristics_enabled,
                 "heuristic_rules": settings.heuristic_rules or {},
+                "ui_theme": self._normalize_theme(settings.ui_theme),
             }
         )

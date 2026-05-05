@@ -628,5 +628,11 @@
     "level": "info",
     "title": "Информация",
     "message": "Служба RzActionSvc отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:59:52.847323",
+    "level": "info",
+    "title": "Информация",
+    "message": "Поиск процессов по папке 'C:\\ProgramData': найдено 37"
   }
 ]

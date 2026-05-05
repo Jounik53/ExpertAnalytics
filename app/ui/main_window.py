@@ -4,7 +4,12 @@ import json
 import os
 import re
 import threading
+import ctypes
+import time
+import webbrowser
+from ctypes import wintypes
 import tkinter as tk
+from urllib.parse import quote_plus
 from collections import defaultdict
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -31,6 +36,38 @@ MAX_LIVE_REPORT_LINES = 1200
 
 
 class MainWindow:
+    _THEME_DARK = {
+        "bg": "#1b1f24",
+        "panel": "#242a31",
+        "panel_alt": "#2c3440",
+        "text": "#e9edf2",
+        "muted_text": "#b7c0cc",
+        "accent": "#3f7fd6",
+        "border": "#3a4452",
+        "input_bg": "#1f252d",
+        "select_bg": "#2d5f9e",
+        "select_fg": "#ffffff",
+        "danger": "#7e3434",
+        "warn": "#85722b",
+        "ok": "#2f6245",
+    }
+
+    _THEME_LIGHT = {
+        "bg": "#f1f4f8",
+        "panel": "#ffffff",
+        "panel_alt": "#e9eef5",
+        "text": "#1f2933",
+        "muted_text": "#4b5a6a",
+        "accent": "#2d6cca",
+        "border": "#c9d3e0",
+        "input_bg": "#ffffff",
+        "select_bg": "#2d6cca",
+        "select_fg": "#ffffff",
+        "danger": "#ffd7d7",
+        "warn": "#fff5c6",
+        "ok": "#e9f7e9",
+    }
+
     def __init__(
         self,
         scan_service: ScanService,
@@ -78,10 +115,25 @@ class MainWindow:
         self._last_snapshot = None
         self._sort_reverse: dict[tuple[int, str], bool] = {}
         self._active_sort: dict[int, tuple[str, bool]] = {}
+        self._status_anim_after_id: str | None = None
+        self._status_anim_base: str = ""
+        self._status_anim_step: int = 0
+        self._metrics_after_id: str | None = None
+        self._gpu_metric_cache: float | None = None
+        self._gpu_metric_ts: float = 0.0
+        self._vmem_metric_cache: float | None = None
+        self._vmem_metric_ts: float = 0.0
 
         self.root = tk.Tk()
         self.root.title(self._i18n.t("app.title"))
         self.root.geometry("1620x980")
+        self.root.minsize(1200, 760)
+        self._is_maximized = False
+        self._normal_geometry = self.root.geometry()
+        self._drag_origin: tuple[int, int, int, int] | None = None
+        self.root.overrideredirect(True)
+        self.root.bind("<Map>", self._on_root_map, add="+")
+        self.root.bind("<Configure>", self._on_root_configure, add="+")
         self._build_style()
         self._init_variables()
         self._build()
@@ -90,6 +142,135 @@ class MainWindow:
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("Header.TLabel", font=("Segoe UI", 10, "bold"))
+        self._apply_theme(self._settings.ui_theme)
+
+    @staticmethod
+    def _normalize_theme(theme: str | None) -> str:
+        value = (theme or "dark").strip().lower()
+        return "light" if value == "light" else "dark"
+
+    def _theme_colors(self) -> dict[str, str]:
+        return self._THEME_LIGHT if self._normalize_theme(getattr(self, "_current_theme", "dark")) == "light" else self._THEME_DARK
+
+    def _apply_theme(self, theme: str) -> None:
+        self._current_theme = self._normalize_theme(theme)
+        c = self._theme_colors()
+        style = ttk.Style()
+
+        self.root.configure(background=c["bg"])
+
+        style.configure(".",
+                        background=c["bg"],
+                        foreground=c["text"],
+                        fieldbackground=c["input_bg"],
+                        bordercolor=c["border"],
+                        lightcolor=c["border"],
+                        darkcolor=c["border"],
+                        troughcolor=c["panel_alt"])
+        style.configure("TFrame", background=c["bg"])
+        style.configure("Titlebar.TFrame", background=c["panel_alt"], bordercolor=c["border"])
+        style.configure("TNotebook", background=c["bg"], bordercolor=c["border"])
+        style.configure("TNotebook.Tab", background=c["panel_alt"], foreground=c["text"], padding=(10, 6))
+        style.map("TNotebook.Tab", background=[("selected", c["panel"])], foreground=[("selected", c["text"]), ("!selected", c["muted_text"])])
+
+        style.configure("TLabel", background=c["bg"], foreground=c["text"])
+        style.configure("Titlebar.TLabel", background=c["panel_alt"], foreground=c["text"], font=("Segoe UI", 10, "bold"))
+        style.configure("Statusbar.TFrame", background=c["panel_alt"], bordercolor=c["border"])
+        style.configure("Status.TLabel", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"])
+        style.configure("Header.TLabel", background=c["bg"], foreground=c["text"], font=("Segoe UI", 10, "bold"))
+        style.configure("TLabelframe", background=c["bg"], foreground=c["text"], bordercolor=c["border"])
+        style.configure("TLabelframe.Label", background=c["bg"], foreground=c["text"])
+
+        style.configure("TButton", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"], focusthickness=1, focuscolor=c["accent"])
+        style.map("TButton",
+                  background=[("active", c["panel"]), ("pressed", c["panel"])],
+                  foreground=[("disabled", c["muted_text"]), ("!disabled", c["text"])])
+        style.configure("Titlebar.TButton", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"], padding=(8, 4), focusthickness=0)
+        style.map("Titlebar.TButton", background=[("active", c["panel"]), ("pressed", c["panel"]), ("!active", c["panel_alt"])], foreground=[("!disabled", c["text"])])
+        style.configure("TitlebarClose.TButton", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"], padding=(8, 4), focusthickness=0)
+        style.map("TitlebarClose.TButton", background=[("active", "#b63d4a"), ("pressed", "#9f2f3b"), ("!active", c["panel_alt"])], foreground=[("!disabled", "#ffffff")])
+
+        style.configure("TEntry", fieldbackground=c["input_bg"], foreground=c["text"], bordercolor=c["border"], insertcolor=c["text"])
+        style.configure("TCombobox", fieldbackground=c["input_bg"], background=c["input_bg"], foreground=c["text"], arrowcolor=c["text"], bordercolor=c["border"])
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", c["input_bg"])],
+                  foreground=[("readonly", c["text"])],
+                  selectbackground=[("readonly", c["select_bg"])],
+                  selectforeground=[("readonly", c["select_fg"])])
+
+        style.configure("TCheckbutton", background=c["bg"], foreground=c["text"])
+        style.map("TCheckbutton", foreground=[("disabled", c["muted_text"]), ("!disabled", c["text"])])
+
+        style.configure("TProgressbar", background=c["accent"], troughcolor=c["panel_alt"], bordercolor=c["border"], lightcolor=c["accent"], darkcolor=c["accent"])
+
+        style.configure("Treeview", background=c["panel"], fieldbackground=c["panel"], foreground=c["text"], bordercolor=c["border"], rowheight=22)
+        style.configure("Treeview.Heading", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"])
+        style.map("Treeview", background=[("selected", c["select_bg"])], foreground=[("selected", c["select_fg"])])
+        style.map("Treeview.Heading", background=[("active", c["panel"])], foreground=[("active", c["text"])])
+
+        style.configure("Vertical.TScrollbar", background=c["panel_alt"], troughcolor=c["panel"], bordercolor=c["border"], arrowcolor=c["text"])
+        style.configure("Horizontal.TScrollbar", background=c["panel_alt"], troughcolor=c["panel"], bordercolor=c["border"], arrowcolor=c["text"])
+
+        for text_widget_name in [
+            "overview_text",
+            "process_details",
+            "report_details",
+            "log_text",
+            "diag_text",
+        ]:
+            widget = getattr(self, text_widget_name, None)
+            if widget is not None:
+                try:
+                    widget.configure(background=c["panel"], foreground=c["text"], insertbackground=c["text"], selectbackground=c["select_bg"], selectforeground=c["select_fg"], highlightbackground=c["border"], highlightcolor=c["accent"])
+                except tk.TclError:
+                    pass
+
+        if hasattr(self, "module_list"):
+            try:
+                self.module_list.configure(background=c["panel"], foreground=c["text"], selectbackground=c["select_bg"], selectforeground=c["select_fg"], highlightbackground=c["border"], highlightcolor=c["accent"])
+            except tk.TclError:
+                pass
+
+        for tree_name in [
+            "overview_tree",
+            "process_tree",
+            "startup_tree",
+            "service_tree",
+            "report_tree",
+            "folder_process_tree",
+            "events_tree",
+            "sampling_tree",
+        ]:
+            tree = getattr(self, tree_name, None)
+            if tree is not None:
+                self._configure_memory_tags(tree)
+
+        if hasattr(self, "status_label"):
+            try:
+                self.status_label.configure(style="Status.TLabel")
+            except tk.TclError:
+                pass
+
+        if hasattr(self, "status_metrics"):
+            try:
+                self.status_metrics.configure(style="Statusbar.TFrame")
+            except tk.TclError:
+                pass
+            for lbl_name in ["metric_ram", "metric_vmem", "metric_vram", "metric_cpu"]:
+                lbl = getattr(self, lbl_name, None)
+                if lbl is not None:
+                    try:
+                        lbl.configure(bg=c["panel_alt"], highlightbackground=c["border"], highlightcolor=c["border"])
+                    except tk.TclError:
+                        pass
+            try:
+                self._refresh_system_metrics()
+            except Exception:
+                pass
+
+        if hasattr(self, "status_var"):
+            self.root.update_idletasks()
+        self._apply_rounded_corners()
 
     def _init_variables(self) -> None:
         self.var_high = tk.IntVar(value=self._settings.process_high_mb)
@@ -104,9 +285,11 @@ class MainWindow:
         self.var_sampling_interval = tk.IntVar(value=self._settings.sampling_interval_sec)
         self.var_dry_run = tk.BooleanVar(value=self._settings.dry_run_actions)
         self.var_locale = tk.StringVar(value=self._settings.locale_code)
+        self.var_theme = tk.StringVar(value=self._normalize_theme(self._settings.ui_theme))
         self.var_cpu_limit = tk.IntVar(value=self._settings.cpu_limit_percent)
         self.var_heuristics_enabled = tk.BooleanVar(value=self._settings.heuristics_enabled)
         self.var_show_disabled_services = tk.BooleanVar(value=True)
+        self.var_show_disabled_startup = tk.BooleanVar(value=True)
 
         self.var_search = tk.StringVar(value="")
         self.var_level = tk.StringVar(value="all")
@@ -118,6 +301,7 @@ class MainWindow:
         self.build_status = tk.StringVar(value="Ожидание сборки")
 
     def _build(self) -> None:
+        self._build_custom_titlebar()
         self._build_header_controls()
 
         self.notebook = ttk.Notebook(self.root)
@@ -160,19 +344,299 @@ class MainWindow:
         self._build_sampling_tab()
 
         self.status_var = tk.StringVar(value=self._i18n.t("status.ready"))
-        ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W).pack(fill=tk.X, side=tk.BOTTOM)
+        self.status_bar = ttk.Frame(self.root, style="Statusbar.TFrame")
+        self.status_bar.pack(fill=tk.X, side=tk.BOTTOM)
+
+        self.status_label = ttk.Label(self.status_bar, textvariable=self.status_var, style="Status.TLabel", anchor=tk.W, padding=(8, 4))
+        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.status_metrics = ttk.Frame(self.status_bar, style="Statusbar.TFrame")
+        self.status_metrics.place(relx=0.5, rely=0.5, anchor="center")
+
+        self.metric_ram = tk.Label(self.status_metrics, text="RAM: -", font=("Segoe UI", 9, "bold"), padx=8, pady=1, bd=1, relief=tk.SOLID)
+        self.metric_vmem = tk.Label(self.status_metrics, text="Вирт: -", font=("Segoe UI", 9, "bold"), padx=8, pady=1, bd=1, relief=tk.SOLID)
+        self.metric_vram = tk.Label(self.status_metrics, text="VRAM: -", font=("Segoe UI", 9, "bold"), padx=8, pady=1, bd=1, relief=tk.SOLID)
+        self.metric_cpu = tk.Label(self.status_metrics, text="CPU: -", font=("Segoe UI", 9, "bold"), padx=8, pady=1, bd=1, relief=tk.SOLID)
+        self.metric_ram.pack(side=tk.LEFT)
+        self.metric_vmem.pack(side=tk.LEFT)
+        self.metric_vram.pack(side=tk.LEFT)
+        self.metric_cpu.pack(side=tk.LEFT)
+
+        self._apply_theme(self._current_theme)
+        self._start_metrics_updater()
 
         self.load_reports()
         self._sync_module_info()
         self._restore_events()
         self.root.after(150, self._warmup_on_start)
 
+    def _start_metrics_updater(self) -> None:
+        psutil.cpu_percent(interval=None)
+
+        def _tick() -> None:
+            self._refresh_system_metrics()
+            self._metrics_after_id = self.root.after(1500, _tick)
+
+        _tick()
+
+    def _refresh_system_metrics(self) -> None:
+        try:
+            ram = psutil.virtual_memory().percent
+        except Exception:
+            ram = None
+        vmem = self._virtual_memory_percent_cached()
+        try:
+            cpu = psutil.cpu_percent(interval=None)
+        except Exception:
+            cpu = None
+        vram = self._gpu_vram_percent_cached()
+
+        self._set_metric(self.metric_ram, "RAM", ram)
+        self._set_metric(self.metric_vmem, "Вирт", vmem)
+        self._set_metric(self.metric_vram, "VRAM", vram)
+        self._set_metric(self.metric_cpu, "CPU", cpu)
+
+    def _set_metric(self, label: tk.Label, title: str, value: float | None) -> None:
+        c = self._theme_colors()
+        if value is None:
+            label.configure(text=f"{title}: н/д", fg=c["muted_text"], bg=c["panel_alt"], highlightbackground=c["border"], highlightcolor=c["border"])
+            return
+        pct = max(0.0, min(100.0, float(value)))
+        bg, fg = self._metric_palette(pct)
+        label.configure(text=f"{title}: {pct:.0f}%", fg=fg, bg=bg, highlightbackground=c["border"], highlightcolor=c["border"])
+
+    def _metric_color(self, value: float) -> str:
+        dark = self._normalize_theme(self._current_theme) == "dark"
+        if value >= 80:
+            return "#ff8a8a" if dark else "#c62b2b"
+        if value >= 50:
+            return "#ffd86b" if dark else "#9a7a00"
+        if value >= 20:
+            return "#8ee6b0" if dark else "#1e7d47"
+        return self._theme_colors()["text"]
+
+    def _metric_palette(self, value: float) -> tuple[str, str]:
+        dark = self._normalize_theme(self._current_theme) == "dark"
+        if value >= 80:
+            return ("#7e3434", "#fff1f1") if dark else ("#ffd7d7", "#5f1212")
+        if value >= 50:
+            return ("#85722b", "#fff9e6") if dark else ("#fff5c6", "#5c4b00")
+        if value >= 20:
+            return ("#2f6245", "#f4fff8") if dark else ("#e9f7e9", "#114d2d")
+        return (self._theme_colors()["panel_alt"], self._theme_colors()["text"])
+
+    def _virtual_memory_percent_cached(self) -> float | None:
+        now = time.monotonic()
+        if self._vmem_metric_cache is not None and (now - self._vmem_metric_ts) < 8.0:
+            return self._vmem_metric_cache
+        self._vmem_metric_ts = now
+        self._vmem_metric_cache = self._query_virtual_memory_percent()
+        return self._vmem_metric_cache
+
+    @staticmethod
+    def _query_virtual_memory_percent() -> float | None:
+        script = "(Get-Counter '\\Memory\\% Committed Bytes In Use' -ErrorAction SilentlyContinue).CounterSamples | Select-Object -ExpandProperty CookedValue"
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                capture_output=True,
+                text=True,
+                shell=False,
+                timeout=1800,
+            )
+        except Exception:
+            return None
+        if proc.returncode != 0:
+            return None
+        out = (proc.stdout or "").strip().replace(",", ".")
+        match = re.search(r"-?\d+(?:\.\d+)?", out)
+        if not match:
+            return None
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return None
+
+    def _gpu_vram_percent_cached(self) -> float | None:
+        now = time.monotonic()
+        if self._gpu_metric_cache is not None and (now - self._gpu_metric_ts) < 8.0:
+            return self._gpu_metric_cache
+        self._gpu_metric_ts = now
+        self._gpu_metric_cache = self._query_gpu_vram_percent()
+        return self._gpu_metric_cache
+
+    @staticmethod
+    def _query_gpu_vram_percent() -> float | None:
+        script = (
+            "$used = 0;"
+            "$ctr = Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage' -ErrorAction SilentlyContinue;"
+            "if (-not $ctr) { $ctr = Get-Counter '\\GPU Process Memory(*)\\Dedicated Usage' -ErrorAction SilentlyContinue };"
+            "if ($ctr) { $used = ($ctr.CounterSamples | Measure-Object -Property CookedValue -Sum).Sum };"
+            "$total = (Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Measure-Object -Property AdapterRAM -Sum).Sum;"
+            "if ($total -gt 0) { [math]::Round(($used / $total) * 100, 1) }"
+        )
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                capture_output=True,
+                text=True,
+                shell=False,
+                timeout=2500,
+            )
+        except Exception:
+            return None
+        if proc.returncode != 0:
+            return None
+        out = (proc.stdout or "").strip().replace(",", ".")
+        if not out:
+            return None
+        match = re.search(r"-?\d+(?:\.\d+)?", out)
+        if not match:
+            return None
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return None
+
+    def _start_status_animation(self, base_text: str) -> None:
+        self._stop_status_animation()
+        self._status_anim_base = base_text
+        self._status_anim_step = 0
+
+        def _tick() -> None:
+            dots = "." * ((self._status_anim_step % 4) + 1)
+            self.status_var.set(f"{self._status_anim_base}{dots}")
+            self._status_anim_step += 1
+            self._status_anim_after_id = self.root.after(350, _tick)
+
+        _tick()
+
+    def _stop_status_animation(self, final_text: str | None = None) -> None:
+        if self._status_anim_after_id is not None:
+            try:
+                self.root.after_cancel(self._status_anim_after_id)
+            except tk.TclError:
+                pass
+            self._status_anim_after_id = None
+        if final_text is not None:
+            self.status_var.set(final_text)
+
+    def _build_custom_titlebar(self) -> None:
+        self.titlebar = ttk.Frame(self.root, style="Titlebar.TFrame", padding=(10, 6))
+        self.titlebar.pack(fill=tk.X, side=tk.TOP)
+
+        self.title_label = ttk.Label(self.titlebar, text=self._i18n.t("app.title"), style="Titlebar.TLabel")
+        self.title_label.pack(side=tk.LEFT)
+
+        btns = ttk.Frame(self.titlebar, style="Titlebar.TFrame")
+        btns.pack(side=tk.RIGHT)
+
+        self.btn_min = ttk.Button(btns, text="_", width=3, style="Titlebar.TButton", command=self._minimize_window)
+        self.btn_max = ttk.Button(btns, text="[]", width=3, style="Titlebar.TButton", command=self._toggle_maximize)
+        self.btn_close = ttk.Button(btns, text="X", width=3, style="TitlebarClose.TButton", command=self._close_window)
+        self.btn_min.pack(side=tk.LEFT, padx=(0, 4))
+        self.btn_max.pack(side=tk.LEFT, padx=(0, 4))
+        self.btn_close.pack(side=tk.LEFT)
+
+        for widget in (self.titlebar, self.title_label):
+            widget.bind("<ButtonPress-1>", self._start_window_drag)
+            widget.bind("<B1-Motion>", self._do_window_drag)
+            widget.bind("<Double-Button-1>", lambda _e: self._toggle_maximize())
+
+    def _start_window_drag(self, event) -> None:
+        if self._is_maximized:
+            return
+        self._drag_origin = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
+
+    def _do_window_drag(self, event) -> None:
+        if self._drag_origin is None or self._is_maximized:
+            return
+        start_x, start_y, win_x, win_y = self._drag_origin
+        dx = event.x_root - start_x
+        dy = event.y_root - start_y
+        self.root.geometry(f"+{win_x + dx}+{win_y + dy}")
+
+    def _toggle_maximize(self) -> None:
+        if self._is_maximized:
+            self._restore_window()
+        else:
+            self._maximize_window()
+
+    def _maximize_window(self) -> None:
+        self._normal_geometry = self.root.geometry()
+        left, top, right, bottom = self._work_area()
+        width = max(800, right - left)
+        height = max(600, bottom - top)
+        self.root.geometry(f"{width}x{height}+{left}+{top}")
+        self._is_maximized = True
+        self._update_maximize_button()
+        self._apply_rounded_corners()
+
+    def _restore_window(self) -> None:
+        self.root.geometry(self._normal_geometry)
+        self._is_maximized = False
+        self._update_maximize_button()
+        self._apply_rounded_corners()
+
+    def _update_maximize_button(self) -> None:
+        if hasattr(self, "btn_max"):
+            self.btn_max.configure(text="<>" if self._is_maximized else "[]")
+
+    def _minimize_window(self) -> None:
+        self.root.overrideredirect(False)
+        self.root.iconify()
+
+    def _close_window(self) -> None:
+        if self._metrics_after_id is not None:
+            try:
+                self.root.after_cancel(self._metrics_after_id)
+            except tk.TclError:
+                pass
+            self._metrics_after_id = None
+        self._stop_status_animation()
+        self.root.destroy()
+
+    def _on_root_map(self, _event) -> None:
+        if self.root.state() != "iconic":
+            self.root.overrideredirect(True)
+            self._apply_rounded_corners()
+
+    def _on_root_configure(self, _event) -> None:
+        if not self._is_maximized:
+            self._normal_geometry = self.root.geometry()
+        self._apply_rounded_corners()
+
+    @staticmethod
+    def _work_area() -> tuple[int, int, int, int]:
+        if os.name != "nt":
+            return 0, 0, 1600, 900
+        try:
+            rect = wintypes.RECT()
+            SPI_GETWORKAREA = 48
+            ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
+            return rect.left, rect.top, rect.right, rect.bottom
+        except Exception:
+            return 0, 0, 1600, 900
+
+    def _apply_rounded_corners(self) -> None:
+        if os.name != "nt":
+            return
+        try:
+            self.root.update_idletasks()
+            width = max(1, self.root.winfo_width())
+            height = max(1, self.root.winfo_height())
+            radius = 0 if self._is_maximized else 16
+            hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, radius, radius)
+            ctypes.windll.user32.SetWindowRgn(self.root.winfo_id(), hrgn, True)
+        except Exception:
+            return
+
     def _warmup_on_start(self) -> None:
         settings = self._collect_settings()
+        self._start_status_animation("Фоновое обновление данных")
         threading.Thread(target=self._warmup_worker, args=(settings.process_high_mb, settings.process_medium_mb), daemon=True).start()
 
     def _warmup_worker(self, high_mb: int, medium_mb: int) -> None:
-        self.root.after(0, lambda: self.scan_status.set("Фоновое обновление данных..."))
         try:
             processes = self._scan_service.scan_processes_only(high_mb, medium_mb)
             services = self._scan_service.scan_services_only()
@@ -187,13 +651,12 @@ class MainWindow:
                 self._apply_process_filters()
                 self._fill_services(proc_snapshot)
                 self._fill_startup(proc_snapshot)
-                self._fill_overview(proc_snapshot)
 
             self.root.after(0, _apply)
         except Exception as exc:
             self.root.after(0, lambda: self._handle_error("Ошибка фонового обновления", str(exc)))
         finally:
-            self.root.after(0, lambda: self.scan_status.set("Готово"))
+            self.root.after(0, lambda: self._stop_status_animation("Готово"))
 
     def _attach_scrollbars(self, widget) -> None:
         parent = widget.master
@@ -306,8 +769,8 @@ class MainWindow:
         ttk.Button(scan_box, text="Стоп", command=self.stop_scan).grid(row=0, column=2, padx=4, pady=4)
 
         self.scan_progressbar = ttk.Progressbar(scan_box, maximum=100, variable=self.scan_progress)
-        self.scan_progressbar.grid(row=1, column=0, columnspan=3, sticky="ew", padx=4)
-        ttk.Label(scan_box, textvariable=self.scan_status).grid(row=2, column=0, columnspan=3, sticky=tk.W, padx=4, pady=(2, 4))
+        self.scan_progressbar.grid(row=1, column=0, columnspan=4, sticky="ew", padx=4)
+        ttk.Label(scan_box, textvariable=self.scan_status).grid(row=2, column=0, columnspan=4, sticky=tk.W, padx=4, pady=(2, 4))
 
         build_box = ttk.LabelFrame(head, text="Сборка EXE")
         build_box.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -316,7 +779,7 @@ class MainWindow:
         ttk.Progressbar(build_box, maximum=100, variable=self.build_progress).grid(row=1, column=0, sticky="ew", padx=4)
         ttk.Label(build_box, textvariable=self.build_status).grid(row=2, column=0, sticky=tk.W, padx=4, pady=(2, 4))
 
-        scan_box.columnconfigure(2, weight=1)
+        scan_box.columnconfigure(3, weight=1)
         build_box.columnconfigure(0, weight=1)
 
     def _build_dashboard_tab(self) -> None:
@@ -325,30 +788,28 @@ class MainWindow:
 
         self.overview_tree = ttk.Treeview(
             top,
-            columns=("type", "name", "pid", "memory", "level", "path", "autorun", "heur", "vt"),
+            columns=("file", "kind", "instances", "memory", "autorun", "risk", "vt", "details"),
             show="headings",
         )
         headers = {
-            "type": "Тип",
-            "name": "Имя",
-            "pid": "PID",
+            "file": "Исполняемый файл",
+            "kind": "Источники",
+            "instances": "Экземпляры",
             "memory": "Память",
-            "level": "Уровень",
-            "path": "Путь",
-            "autorun": "В автозагрузке",
-            "heur": "Эвристика",
+            "autorun": "Автозагрузка",
+            "risk": "Риск",
             "vt": "VirusTotal",
+            "details": "Детали",
         }
         widths = {
-            "type": 120,
-            "name": 220,
-            "pid": 90,
-            "memory": 120,
-            "level": 120,
-            "path": 560,
-            "autorun": 130,
-            "heur": 160,
-            "vt": 180,
+            "file": 470,
+            "kind": 140,
+            "instances": 100,
+            "memory": 130,
+            "autorun": 120,
+            "risk": 170,
+            "vt": 170,
+            "details": 420,
         }
         for c in headers:
             self.overview_tree.heading(c, text=headers[c])
@@ -358,12 +819,11 @@ class MainWindow:
         self._attach_scrollbars(self.overview_tree)
         self._configure_memory_tags(self.overview_tree)
         self.overview_tree.bind("<Button-3>", self._open_overview_menu)
+        self.overview_tree.bind("<Double-1>", self._open_overview_details)
 
         actions = ttk.Frame(self.frame_dashboard)
         actions.pack(fill=tk.X, padx=10, pady=(0, 6))
-        ttk.Button(actions, text="Открыть в Проводнике", command=self.action_open_selected_path).pack(side=tk.LEFT, padx=2)
-        ttk.Button(actions, text="Завершить процесс", command=self.action_terminate_process).pack(side=tk.LEFT, padx=2)
-        ttk.Button(actions, text="Проверить в VirusTotal", command=self.action_vt_lookup).pack(side=tk.LEFT, padx=2)
+        ttk.Button(actions, text="Открыть в Проводнике", command=self.action_open_overview_path).pack(side=tk.LEFT, padx=2)
         ttk.Button(actions, text="Сохранить отчет (.txt)", command=self.save_overview_report_txt).pack(side=tk.RIGHT, padx=2)
         ttk.Button(actions, text="Выгрузить отчет (.json)", command=self.export_overview_report_json).pack(side=tk.RIGHT, padx=2)
 
@@ -470,6 +930,12 @@ class MainWindow:
 
         b = ttk.Frame(self.frame_startup)
         b.pack(fill=tk.X, padx=10, pady=(0, 8))
+        ttk.Checkbutton(
+            b,
+            text="Показывать отключенные",
+            variable=self.var_show_disabled_startup,
+            command=self._refresh_startup_view,
+        ).pack(side=tk.LEFT, padx=4)
         ttk.Button(b, text="Обновить", command=self.action_refresh_startup).pack(side=tk.LEFT, padx=4)
         ttk.Button(b, text="Отключить", command=self.action_disable_startup).pack(side=tk.LEFT, padx=4)
         ttk.Button(b, text="Удалить", command=self.action_remove_startup).pack(side=tk.LEFT, padx=4)
@@ -507,6 +973,7 @@ class MainWindow:
         self._enable_tree_sorting(self.service_tree, list(headers.keys()))
         self.service_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         self._attach_scrollbars(self.service_tree)
+        self.service_tree.bind("<Button-3>", self._open_service_menu)
 
         b = ttk.Frame(self.frame_services)
         b.pack(fill=tk.X, padx=10, pady=(0, 8))
@@ -607,6 +1074,12 @@ class MainWindow:
         ttk.Combobox(tab_general, textvariable=self.var_locale, values=[Language.RU.value, Language.EN.value], state="readonly", width=10).grid(row=row, column=1, sticky=tk.W, padx=6)
         row += 1
 
+        ttk.Label(tab_general, text="Тема интерфейса").grid(row=row, column=0, sticky=tk.W, padx=6, pady=6)
+        theme_combo = ttk.Combobox(tab_general, textvariable=self.var_theme, values=["dark", "light"], state="readonly", width=12)
+        theme_combo.grid(row=row, column=1, sticky=tk.W, padx=6)
+        theme_combo.bind("<<ComboboxSelected>>", lambda _e: self._apply_theme(self.var_theme.get()))
+        row += 1
+
         ttk.Checkbutton(tab_general, text="Включить проверку VirusTotal", variable=self.var_vt_enabled).grid(row=row, column=0, columnspan=2, sticky=tk.W, padx=6, pady=4)
         row += 1
         ttk.Label(tab_general, text="Ключ VirusTotal API").grid(row=row, column=0, sticky=tk.W, padx=6, pady=6)
@@ -702,6 +1175,7 @@ class MainWindow:
             sampling_interval_sec=int(self.var_sampling_interval.get() or 3),
             dry_run_actions=bool(self.var_dry_run.get()),
             locale_code=self.var_locale.get() or Language.RU.value,
+            ui_theme=self._normalize_theme(self.var_theme.get()),
             cpu_limit_percent=cpu_limit,
             heuristics_enabled=bool(self.var_heuristics_enabled.get()),
             heuristic_rules={k: bool(v.get()) for k, v in getattr(self, "heuristic_vars", {}).items()},
@@ -711,12 +1185,13 @@ class MainWindow:
         settings = self._collect_settings()
         self._settings_service.save(settings)
         self._settings = settings
+        self._apply_theme(settings.ui_theme)
         self.status_var.set("Настройки сохранены")
         self._emit_event(EventLevel.INFO, "Информация", "Настройки сохранены")
 
     def scan(self) -> None:
         if self._busy:
-            self.status_var.set(self._i18n.t("status.busy"))
+            self._stop_status_animation(self._i18n.t("status.busy"))
             return
 
         self.scan_progress.set(0)
@@ -819,6 +1294,7 @@ class MainWindow:
         self._emit_event(EventLevel.WARNING, "Предупреждение", "Запрошена остановка сканирования")
 
     def _after_scan(self, snapshot, report: str) -> None:
+        self._stop_status_animation()
         self._all_processes = list(snapshot.process_records)
         self._all_startup = list(snapshot.startup_entries)
         self._all_services = list(snapshot.service_records)
@@ -842,16 +1318,24 @@ class MainWindow:
         self._busy = False
 
     def _handle_error(self, title: str, message: str) -> None:
+        self._stop_status_animation()
         self.status_var.set(f"{title}: {message}")
         self.scan_status.set(title)
         self._emit_event(EventLevel.ERROR, "Ошибка", message)
         messagebox.showerror(title, message)
 
     def _configure_memory_tags(self, tree: ttk.Treeview) -> None:
-        tree.tag_configure("mem_white", background="#ffffff")
-        tree.tag_configure("mem_green", background="#e9f7e9")
-        tree.tag_configure("mem_yellow", background="#fff5c6")
-        tree.tag_configure("mem_red", background="#ffd7d7")
+        c = self._theme_colors()
+        if self._normalize_theme(self._current_theme) == "light":
+            tree.tag_configure("mem_white", background=c["panel"], foreground=c["text"])
+            tree.tag_configure("mem_green", background=c["ok"], foreground=c["text"])
+            tree.tag_configure("mem_yellow", background=c["warn"], foreground=c["text"])
+            tree.tag_configure("mem_red", background=c["danger"], foreground=c["text"])
+            return
+        tree.tag_configure("mem_white", background=c["panel"], foreground=c["text"])
+        tree.tag_configure("mem_green", background="#2f6245", foreground="#f4fff8")
+        tree.tag_configure("mem_yellow", background="#85722b", foreground="#fff9e6")
+        tree.tag_configure("mem_red", background="#7e3434", foreground="#fff1f1")
 
     @staticmethod
     def _memory_tag(memory_mb: float) -> str:
@@ -927,10 +1411,17 @@ class MainWindow:
         self._restore_tree_sort(self.process_tree)
 
     def _fill_startup(self, snapshot) -> None:
+        self._all_startup = list(snapshot.startup_entries)
+        self._refresh_startup_view()
+
+    def _refresh_startup_view(self) -> None:
         self.startup_tree.delete(*self.startup_tree.get_children())
         self._startup_index.clear()
         grouped = defaultdict(list)
-        for rec in snapshot.startup_entries:
+        show_disabled = bool(self.var_show_disabled_startup.get())
+        for rec in self._all_startup:
+            if not show_disabled and not rec.enabled:
+                continue
             grouped[rec.category].append(rec)
 
         category_map = {
@@ -995,50 +1486,131 @@ class MainWindow:
         self.overview_tree.delete(*self.overview_tree.get_children())
         self._overview_index.clear()
 
+        grouped: dict[str, dict[str, object]] = {}
+
+        def _group_key(path: str, fallback: str) -> str:
+            cleaned = (path or "").strip()
+            if cleaned:
+                return cleaned.lower()
+            return f"name::{(fallback or '').strip().lower()}"
+
         for rec in snapshot.process_records:
-            vals = (
-                "Процесс",
-                rec.name,
-                rec.pid,
-                f"{rec.memory_mb:.1f} МБ",
-                self._level_ru(rec.memory_level.value),
-                rec.exe_path,
-                self._process_autorun_state(rec),
-                self._heur_summary(rec),
-                self._vt_summary(rec),
+            display_path = (rec.exe_path or "").strip() or rec.name
+            key = _group_key(rec.exe_path, rec.name)
+            item = grouped.setdefault(
+                key,
+                {
+                    "display_path": display_path,
+                    "processes": [],
+                    "services": [],
+                    "startup": [],
+                    "memory": 0.0,
+                    "autorun": False,
+                    "heur_max": 0,
+                    "vt_max": 0,
+                },
             )
-            iid = self.overview_tree.insert("", tk.END, values=vals, tags=(self._memory_tag(rec.memory_mb),))
-            self._overview_index[iid] = ("process", rec)
+            item["processes"].append(rec)
+            item["memory"] = float(item["memory"]) + float(rec.memory_mb)
+            item["heur_max"] = max(int(item["heur_max"]), int(rec.heuristic_score))
+            vt = rec.vt_result
+            vt_mal = int(vt.malicious) if vt and vt.available else 0
+            item["vt_max"] = max(int(item["vt_max"]), vt_mal)
+            if self._process_autorun_state(rec) == "Да":
+                item["autorun"] = True
 
-        for rec in snapshot.service_records:
-            vals = (
-                "Служба",
-                rec.name,
-                rec.pid or "-",
-                "-",
-                "-",
-                rec.executable_path,
-                "-",
-                f"риск {rec.risk_score}",
-                "-",
+        for svc in snapshot.service_records:
+            display_path = (svc.executable_path or "").strip() or svc.name
+            key = _group_key(svc.executable_path, svc.name)
+            item = grouped.setdefault(
+                key,
+                {
+                    "display_path": display_path,
+                    "processes": [],
+                    "services": [],
+                    "startup": [],
+                    "memory": 0.0,
+                    "autorun": False,
+                    "heur_max": 0,
+                    "vt_max": 0,
+                },
             )
-            iid = self.overview_tree.insert("", tk.END, values=vals)
-            self._overview_index[iid] = ("service", rec)
+            item["services"].append(svc)
 
-        for rec in snapshot.startup_entries:
-            vals = (
-                "Автозагрузка",
-                rec.name,
-                "-",
-                "-",
-                "-",
-                rec.command,
-                "Да" if rec.enabled else "Нет",
-                "-",
-                "-",
+        for st in snapshot.startup_entries:
+            cmd = (st.command or "").strip().strip('"')
+            exe_candidate = cmd.split(" ")[0].strip('"') if cmd else ""
+            if exe_candidate.lower().startswith(("runas=", "script:", "commandline:")):
+                exe_candidate = ""
+            display_path = exe_candidate or st.command or st.name
+            key = _group_key(exe_candidate, st.name)
+            item = grouped.setdefault(
+                key,
+                {
+                    "display_path": display_path,
+                    "processes": [],
+                    "services": [],
+                    "startup": [],
+                    "memory": 0.0,
+                    "autorun": False,
+                    "heur_max": 0,
+                    "vt_max": 0,
+                },
             )
-            iid = self.overview_tree.insert("", tk.END, values=vals)
-            self._overview_index[iid] = ("startup", rec)
+            item["startup"].append(st)
+            if st.enabled:
+                item["autorun"] = True
+
+        rows = []
+        for item in grouped.values():
+            procs = item["processes"]
+            svcs = item["services"]
+            starts = item["startup"]
+            kinds = []
+            if procs:
+                kinds.append("Процессы")
+            if svcs:
+                kinds.append("Службы")
+            if starts:
+                kinds.append("Автозагрузка")
+
+            heur_max = int(item["heur_max"])
+            vt_max = int(item["vt_max"])
+            risk_chunks = []
+            if heur_max > 0:
+                risk_chunks.append(f"Эвристика {heur_max}")
+            if vt_max > 0:
+                risk_chunks.append(f"VT M:{vt_max}")
+            if not risk_chunks:
+                risk_chunks.append("Нет")
+
+            svc_risk = [s for s in svcs if getattr(s, "risk_score", 0) > 0]
+            detail_chunks = [
+                f"PIDs: {', '.join(str(p.pid) for p in procs[:5])}" if procs else "PIDs: -",
+                f"Службы: {', '.join(s.name for s in svcs[:3])}" if svcs else "Службы: -",
+                f"Автозапуск: {', '.join(s.name for s in starts[:2])}" if starts else "Автозапуск: -",
+            ]
+            if svc_risk:
+                detail_chunks.append(f"Риск служб: {max(s.risk_score for s in svc_risk)}")
+
+            vals = (
+                str(item["display_path"]),
+                ", ".join(kinds) if kinds else "-",
+                str(len(procs)),
+                f"{float(item['memory']):.1f} МБ" if procs else "-",
+                "Да" if bool(item["autorun"]) else "Нет",
+                " | ".join(risk_chunks),
+                f"M:{vt_max}" if vt_max > 0 else "нет данных",
+                " | ".join(detail_chunks),
+            )
+            rows.append((vals, item))
+
+        rows.sort(key=lambda x: str(x[0][0]).lower())
+        for vals, item in rows:
+            mem_val = float(item["memory"])
+            tag = self._memory_tag(mem_val) if mem_val > 0 else "mem_white"
+            iid = self.overview_tree.insert("", tk.END, values=vals, tags=(tag,))
+            self._overview_index[iid] = ("overview_file", item)
         self._restore_tree_sort(self.overview_tree)
 
     def _fill_overview_report(self, snapshot) -> None:
@@ -1264,6 +1836,82 @@ class MainWindow:
                 return data[1]  # type: ignore[return-value]
         return None
 
+    def _selected_overview_path(self) -> str:
+        selection = self.overview_tree.selection()
+        if not selection:
+            return ""
+        data = self._overview_index.get(selection[0])
+        if not data or data[0] != "overview_file":
+            return ""
+        payload = data[1]
+        if not isinstance(payload, dict):
+            return ""
+        value = str(payload.get("display_path") or "").strip()
+        return value
+
+    def _selected_overview_payload(self) -> dict[str, object] | None:
+        selection = self.overview_tree.selection()
+        if not selection:
+            return None
+        data = self._overview_index.get(selection[0])
+        if not data or data[0] != "overview_file":
+            return None
+        payload = data[1]
+        if isinstance(payload, dict):
+            return payload
+        return None
+
+    def action_search_process_online(self) -> None:
+        rec = self._selected_process(silent=True)
+        if rec is None:
+            self.status_var.set("Выберите процесс")
+            return
+        query = rec.name or rec.exe_path or str(rec.pid)
+        self._search_online(query)
+
+    def action_search_startup_online(self) -> None:
+        rec = self._selected_startup()
+        if rec is None:
+            self.status_var.set("Выберите запись автозагрузки")
+            return
+        query = rec.name or rec.command or rec.location
+        self._search_online(query)
+
+    def action_search_service_online(self) -> None:
+        rec = self._selected_service()
+        if rec is None:
+            self.status_var.set("Выберите службу")
+            return
+        query = rec.name or rec.display_name or rec.executable_path
+        self._search_online(query)
+
+    def action_search_overview_online(self) -> None:
+        payload = self._selected_overview_payload()
+        if payload is None:
+            self.status_var.set("Выберите запись в обзоре")
+            return
+        query = str(payload.get("display_path") or payload.get("kind") or "").strip()
+        self._search_online(query)
+
+    def _search_online(self, query: str) -> None:
+        text = (query or "").strip()
+        if not text:
+            self.status_var.set("Нет данных для поиска")
+            return
+        url = f"https://www.google.com/search?q={quote_plus(text)}"
+        try:
+            webbrowser.open_new_tab(url)
+            self.status_var.set(f"Открыт поиск в Google: {text}")
+        except Exception as exc:
+            self.status_var.set(f"Не удалось открыть браузер: {exc}")
+
+    def action_search_folder_process_online(self) -> None:
+        rec = self._selected_folder_process()
+        if rec is None:
+            return
+        query = rec.name or rec.exe_path or str(rec.pid)
+        self._search_online(query)
+
     def _show_action_result(self, result) -> None:
         self.status_var.set(result.message)
         if "администратора" in result.message.lower() and "запустите" in result.message.lower():
@@ -1295,6 +1943,107 @@ class MainWindow:
         if rec and rec.exe_path:
             self._show_action_result(self._action_service.open_in_explorer(rec.exe_path))
 
+    def action_open_overview_path(self) -> None:
+        path = self._selected_overview_path()
+        if not path:
+            self.status_var.set("Выберите запись в таблице обзора")
+            return
+        self._show_action_result(self._action_service.open_in_explorer(path))
+
+    def _open_overview_details(self, _event=None) -> None:
+        payload = self._selected_overview_payload()
+        if payload is None:
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("Детали записи обзора")
+        win.geometry("920x540")
+        win.transient(self.root)
+        try:
+            win.grab_set()
+        except tk.TclError:
+            pass
+
+        top = ttk.Frame(win)
+        top.pack(fill=tk.X, padx=10, pady=(10, 6))
+        ttk.Label(top, text="Детали записи", style="Header.TLabel").pack(side=tk.LEFT)
+        ttk.Button(top, text="Закрыть", command=win.destroy).pack(side=tk.RIGHT)
+
+        details = tk.Text(win, wrap=tk.WORD)
+        details.pack(fill=tk.BOTH, expand=True, padx=10, pady=6)
+        self._attach_scrollbars(details)
+
+        path = str(payload.get("display_path") or "").strip()
+        processes = payload.get("processes") if isinstance(payload.get("processes"), list) else []
+        services = payload.get("services") if isinstance(payload.get("services"), list) else []
+        startup = payload.get("startup") if isinstance(payload.get("startup"), list) else []
+        heur = int(payload.get("heur_max") or 0)
+        vtmax = int(payload.get("vt_max") or 0)
+        mem = float(payload.get("memory") or 0.0)
+
+        lines = [
+            f"Путь: {path or '-'}",
+            f"Экземпляров процессов: {len(processes)}",
+            f"Служб: {len(services)}",
+            f"Записей автозагрузки: {len(startup)}",
+            f"Суммарная память: {mem:.1f} МБ" if mem > 0 else "Суммарная память: -",
+            f"Эвристика (max): {heur}",
+            f"VirusTotal M (max): {vtmax}",
+            "",
+            "Процессы:",
+        ]
+        if processes:
+            for rec in processes:
+                lines.append(f"- {rec.name} (PID {rec.pid}) | {rec.memory_mb:.1f} МБ | {rec.exe_path}")
+        else:
+            lines.append("- Нет")
+
+        lines.append("")
+        lines.append("Службы:")
+        if services:
+            for rec in services:
+                lines.append(f"- {rec.name} | статус: {rec.status} | запуск: {rec.start_type} | путь: {rec.executable_path}")
+        else:
+            lines.append("- Нет")
+
+        lines.append("")
+        lines.append("Автозагрузка:")
+        if startup:
+            for rec in startup:
+                lines.append(f"- {rec.name} | {'включена' if rec.enabled else 'отключена'} | {rec.location}")
+        else:
+            lines.append("- Нет")
+
+        details.insert(tk.END, "\n".join(lines))
+        details.configure(state=tk.DISABLED)
+
+        actions = ttk.Frame(win)
+        actions.pack(fill=tk.X, padx=10, pady=(0, 10))
+        def _open_selected_path() -> None:
+            if path:
+                self._show_action_result(self._action_service.open_in_explorer(path))
+            else:
+                self.status_var.set("Путь для открытия не найден")
+
+        ttk.Button(actions, text="Открыть в Проводнике", command=_open_selected_path).pack(side=tk.LEFT, padx=4)
+
+        def _close_one_process() -> None:
+            if not processes:
+                self.status_var.set("Нет процессов для завершения")
+                return
+            proc = processes[0]
+            self._show_action_result(self._action_service.terminate_process(proc.pid))
+
+        ttk.Button(actions, text="Закрыть процесс", command=_close_one_process).pack(side=tk.LEFT, padx=4)
+
+        if startup:
+            def _remove_from_startup() -> None:
+                rec = startup[0]
+                self._show_action_result(self._action_service.remove_startup(rec))
+                self.action_refresh_startup(silent=True)
+
+            ttk.Button(actions, text="Убрать из автозагрузки", command=_remove_from_startup).pack(side=tk.LEFT, padx=4)
+
     def action_vt_lookup(self) -> None:
         rec = self._selected_process()
         if rec is None:
@@ -1306,13 +2055,6 @@ class MainWindow:
             result = self._scan_service.lookup_sha256(rec.file_sha256)
             rec.vt_result = result
             self._apply_process_filters()
-            self._fill_overview(
-                type("Snapshot", (), {
-                    "process_records": self._all_processes,
-                    "service_records": self._all_services,
-                    "startup_entries": self._all_startup,
-                })
-            )
             self.status_var.set(f"VirusTotal: {self._vt_summary(rec)}")
             self._emit_event(EventLevel.INFO, "Информация", f"VirusTotal для {rec.name}: {self._vt_summary(rec)}")
         except Exception as exc:
@@ -1360,7 +2102,6 @@ class MainWindow:
             )
             self._all_startup = list(entries)
             self._fill_startup(snapshot)
-            self._fill_overview(snapshot)
             if not silent:
                 self.status_var.set("Автозагрузка обновлена")
                 self._emit_event(EventLevel.INFO, "Информация", "Автозагрузка обновлена")
@@ -1381,7 +2122,6 @@ class MainWindow:
             )
             self._all_services = list(services)
             self._fill_services(snapshot)
-            self._fill_overview(snapshot)
             if not silent:
                 self.status_var.set("Список служб обновлен")
                 self._emit_event(EventLevel.INFO, "Информация", "Список служб обновлен")
@@ -1523,6 +2263,9 @@ class MainWindow:
         m.add_command(label="Открыть в Проводнике", command=self.action_open_folder_process_path)
         m.add_command(label="Завершить процесс", command=self.action_terminate_folder_process)
         m.add_command(label="Проверить в VirusTotal", command=self.action_vt_folder_process)
+        m.add_separator()
+        m.add_command(label="Искать в интернете", command=self.action_search_folder_process_online)
+        m.add_command(label="Копировать запись", command=lambda: self._copy_tree_row(self.folder_process_tree))
         m.tk_popup(event.x_root, event.y_root)
 
     def build_exe(self) -> None:
@@ -1557,12 +2300,30 @@ class MainWindow:
         if iid:
             tree.selection_set(iid)
 
+    def _copy_tree_row(self, tree: ttk.Treeview) -> None:
+        selection = tree.selection()
+        if not selection:
+            self.status_var.set("Нет выделенной записи для копирования")
+            return
+        values = tree.item(selection[0], "values")
+        text = "\t".join(str(v) for v in values)
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+            self.root.update_idletasks()
+            self.status_var.set("Запись скопирована")
+        except tk.TclError:
+            self.status_var.set("Не удалось скопировать запись")
+
     def _open_process_menu(self, event) -> None:
         self._menu_target(event, self.process_tree)
         m = tk.Menu(self.root, tearoff=0)
         m.add_command(label="Открыть в Проводнике", command=self.action_open_selected_path)
         m.add_command(label="Завершить процесс", command=self.action_terminate_process)
         m.add_command(label="Проверить в VirusTotal", command=self.action_vt_lookup)
+        m.add_separator()
+        m.add_command(label="Искать в интернете", command=self.action_search_process_online)
+        m.add_command(label="Копировать запись", command=lambda: self._copy_tree_row(self.process_tree))
         m.tk_popup(event.x_root, event.y_root)
 
     def _open_startup_menu(self, event) -> None:
@@ -1571,6 +2332,20 @@ class MainWindow:
         m.add_command(label="Отключить", command=self.action_disable_startup)
         m.add_command(label="Удалить", command=self.action_remove_startup)
         m.add_command(label="Открыть в Проводнике", command=self.action_open_startup_path)
+        m.add_separator()
+        m.add_command(label="Искать в интернете", command=self.action_search_startup_online)
+        m.add_command(label="Копировать запись", command=lambda: self._copy_tree_row(self.startup_tree))
+        m.tk_popup(event.x_root, event.y_root)
+
+    def _open_service_menu(self, event) -> None:
+        self._menu_target(event, self.service_tree)
+        m = tk.Menu(self.root, tearoff=0)
+        m.add_command(label="Остановить службу", command=self.action_stop_service)
+        m.add_command(label="Отключить службу", command=self.action_disable_service)
+        m.add_command(label="Открыть в Проводнике", command=self.action_open_service_path)
+        m.add_separator()
+        m.add_command(label="Искать в интернете", command=self.action_search_service_online)
+        m.add_command(label="Копировать запись", command=lambda: self._copy_tree_row(self.service_tree))
         m.tk_popup(event.x_root, event.y_root)
 
     def _open_overview_menu(self, event) -> None:
@@ -1583,18 +2358,11 @@ class MainWindow:
             return
         kind = row[0]
         m = tk.Menu(self.root, tearoff=0)
-        if kind == "process":
-            m.add_command(label="Открыть в Проводнике", command=self.action_open_selected_path)
-            m.add_command(label="Завершить процесс", command=self.action_terminate_process)
-            m.add_command(label="Проверить в VirusTotal", command=self.action_vt_lookup)
-        elif kind == "startup":
-            m.add_command(label="Отключить", command=self.action_disable_startup)
-            m.add_command(label="Удалить", command=self.action_remove_startup)
-            m.add_command(label="Открыть в Проводнике", command=self.action_open_startup_path)
-        elif kind == "service":
-            m.add_command(label="Остановить службу", command=self.action_stop_service)
-            m.add_command(label="Отключить службу", command=self.action_disable_service)
-            m.add_command(label="Открыть в Проводнике", command=self.action_open_service_path)
+        if kind == "overview_file":
+            m.add_command(label="Открыть в Проводнике", command=self.action_open_overview_path)
+            m.add_command(label="Открыть детали", command=self._open_overview_details)
+            m.add_command(label="Искать в интернете", command=self.action_search_overview_online)
+            m.add_command(label="Копировать запись", command=lambda: self._copy_tree_row(self.overview_tree))
         m.tk_popup(event.x_root, event.y_root)
 
     def _restore_events(self) -> None:
