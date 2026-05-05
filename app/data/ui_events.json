@@ -1,0 +1,632 @@
+[
+  {
+    "timestamp": "2026-05-05T11:09:31.777588",
+    "level": "info",
+    "title": "Информация",
+    "message": "Сборка EXE запущена"
+  },
+  {
+    "timestamp": "2026-05-05T11:09:56.295594",
+    "level": "info",
+    "title": "Информация",
+    "message": "Сборка EXE завершена: dist/ExpertAnalytics/ExpertAnalytics.exe"
+  },
+  {
+    "timestamp": "2026-05-05T11:43:48.537440",
+    "level": "info",
+    "title": "Информация",
+    "message": "[dry-run] удалить из автозапуска MicrosoftEdgeAutoLaunch_E9B66341E0F7970F4E92D21F7BAA64E8"
+  },
+  {
+    "timestamp": "2026-05-05T11:44:21.078083",
+    "level": "info",
+    "title": "Информация",
+    "message": "[dry-run] удалить из автозапуска GoogleDriveFS"
+  },
+  {
+    "timestamp": "2026-05-05T11:44:28.459707",
+    "level": "info",
+    "title": "Информация",
+    "message": "[dry-run] удалить из автозапуска EADM"
+  },
+  {
+    "timestamp": "2026-05-05T11:44:33.468671",
+    "level": "info",
+    "title": "Информация",
+    "message": "[dry-run] удалить из автозапуска vkteams.desktop"
+  },
+  {
+    "timestamp": "2026-05-05T11:44:39.085996",
+    "level": "info",
+    "title": "Информация",
+    "message": "[dry-run] удалить из автозапуска SecurityHealth"
+  },
+  {
+    "timestamp": "2026-05-05T12:10:14.744158",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:16:35.271813",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:16:43.378427",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Недостаточно прав для удаления автозапуска. Запустите приложение от имени администратора"
+  },
+  {
+    "timestamp": "2026-05-05T12:18:32.748967",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:18:42.419885",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'svg_file_op1' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:18:46.381433",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:18:49.767744",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'svg_file_op2' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:18:52.888252",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:18:54.371585",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'svg_file_op4' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:18:57.319309",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:18:58.532782",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'svg_file_op3' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:01.612152",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:02.972107",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'svg_file_op5' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:05.907053",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:08.050257",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'svg_file_op6' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:11.158613",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:13.164529",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'svg_file_op7' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:16.274027",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:19.034289",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Файл автозагрузки не найден"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:28.173996",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'LogMeIn Hamachi Ui' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:31.267833",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:32.665648",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'SunJavaUpdateSched' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:35.579330",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:38.482540",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'SACMonitor' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:41.778532",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:48.171787",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска '{EDF77C88-B613-457C-A4CF-EEC03584FC5A}' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:19:53.873376",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:00.084564",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'Application Restart #0' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:03.345607",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:04.916233",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'vkteams.desktop' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:07.788218",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:09.073914",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'EADM' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:12.972480",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:14.273973",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'GoogleDriveFS' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:17.614833",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:18.887761",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'MicrosoftEdgeAutoLaunch_E9B66341E0F7970F4E92D21F7BAA64E8' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:22.164174",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:33.283441",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:35.569192",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Файл автозагрузки не найден"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:44.217548",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'Synapse3' отключена"
+  },
+  {
+    "timestamp": "2026-05-05T12:20:47.460689",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:21:28.447476",
+    "level": "info",
+    "title": "Информация",
+    "message": "Список процессов обновлен"
+  },
+  {
+    "timestamp": "2026-05-05T12:25:29.920791",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Файл или папка не найдены"
+  },
+  {
+    "timestamp": "2026-05-05T12:30:11.410464",
+    "level": "info",
+    "title": "Информация",
+    "message": "Открыто в Проводнике: C:\\Users\\Jouni\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Ollama.lnk"
+  },
+  {
+    "timestamp": "2026-05-05T12:30:27.633724",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:32:30.296470",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Не удалось завершить процесс 334408: (pid=334408)"
+  },
+  {
+    "timestamp": "2026-05-05T12:33:11.444507",
+    "level": "info",
+    "title": "Информация",
+    "message": "Процесс 912080 завершен"
+  },
+  {
+    "timestamp": "2026-05-05T12:33:15.557441",
+    "level": "info",
+    "title": "Информация",
+    "message": "Процесс 822956 завершен"
+  },
+  {
+    "timestamp": "2026-05-05T12:34:44.124853",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба AsusUpdateCheck отключена"
+  },
+  {
+    "timestamp": "2026-05-05T12:36:54.311677",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Ошибка sc stop: [SC] ControlService: ®иЁЎЄ : 109:\n\nЉ ­ « Ўл« § Єалв.\n\n "
+  },
+  {
+    "timestamp": "2026-05-05T12:37:00.042056",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба AmneziaVPN-service отключена"
+  },
+  {
+    "timestamp": "2026-05-05T12:37:07.239877",
+    "level": "info",
+    "title": "Информация",
+    "message": "Список служб обновлен"
+  },
+  {
+    "timestamp": "2026-05-05T12:37:49.882938",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Synapse Service остановлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:37:54.008993",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Chroma SDK Service остановлена"
+  },
+  {
+    "timestamp": "2026-05-05T12:38:43.671232",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Ошибка sc stop: [SC] OpenService: ®иЁЎЄ : 5:\n\nЋвЄ § ­® ў ¤®бвгЇҐ.\n\n "
+  },
+  {
+    "timestamp": "2026-05-05T13:37:13.182538",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\MicrosoftEdgeUpdateTaskMachineCore' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:15.890426",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:17.503907",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\MicrosoftEdgeUpdateTaskMachineUA' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:20.669850",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:22.039650",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\klcp_update' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:24.861346",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:26.483751",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\EOSv3 Scheduler onLogOn' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:29.194205",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:30.907798",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\EOSv3 Scheduler onTime' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:33.289310",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:47.845480",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\CreateExplorerShellUnelevatedTask' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:51.666226",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:53.799410",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\CCleaner Update' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:56.434278",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:37:57.635932",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\CCleanerCrashReporting' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:38:00.124528",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:38:01.732278",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\CCleanerSkipUAC - Jouni' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:38:04.270794",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:39:56.335121",
+    "level": "info",
+    "title": "Информация",
+    "message": "Задача автозапуска '\\Microsoft\\XblGameSave\\XblGameSaveTask' отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:39:58.976047",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:40:53.357048",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'Load' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:40:56.412773",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:41:01.465084",
+    "level": "info",
+    "title": "Информация",
+    "message": "Запись автозапуска 'Shell' удалена"
+  },
+  {
+    "timestamp": "2026-05-05T13:41:04.138064",
+    "level": "info",
+    "title": "Информация",
+    "message": "Автозагрузка обновлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:42:21.464561",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Ошибка sc stop: [SC] ControlService: ®иЁЎЄ : 1062:\n\n‘«г¦Ў  ­Ґ § ЇгйҐ­ .\n\n "
+  },
+  {
+    "timestamp": "2026-05-05T13:42:40.729074",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Hamachi2Svc остановлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:42:49.046016",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба JetBrainsEtwHost.16 отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:42:59.958302",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба KSDE5.22 отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:43:08.585744",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба LMIGuardianSvc отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:43:24.979598",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Chroma SDK Server отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:43:26.965847",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Chroma SDK Server остановлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:43:30.027589",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Chroma SDK Service отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:43:31.660027",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Chroma SDK Service остановлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:43:35.853022",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Chroma Stream Server отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:43:37.860150",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Chroma Stream Server остановлена"
+  },
+  {
+    "timestamp": "2026-05-05T13:43:40.451937",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Ошибка sc stop: [SC] ControlService: ®иЁЎЄ : 1051:\n\nЉ®¬ ­¤  ®бв ­®ўЄЁ Ўл«  ®вЇа ў«Ґ­  б«г¦ЎҐ, ®в Є®в®а®© § ўЁбпв ¤агЈЁҐ б«г¦Ўл.\n\n "
+  },
+  {
+    "timestamp": "2026-05-05T13:43:42.149843",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Game Manager Service отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:43:45.658896",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба Razer Synapse Service отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:44:28.970879",
+    "level": "info",
+    "title": "Информация",
+    "message": "Список служб обновлен"
+  },
+  {
+    "timestamp": "2026-05-05T13:45:39.301974",
+    "level": "info",
+    "title": "Информация",
+    "message": "Список процессов обновлен"
+  },
+  {
+    "timestamp": "2026-05-05T13:48:23.393276",
+    "level": "error",
+    "title": "Ошибка",
+    "message": "Ошибка sc stop: [SC] ControlService: ®иЁЎЄ : 1062:\n\n‘«г¦Ў  ­Ґ § ЇгйҐ­ .\n\n "
+  },
+  {
+    "timestamp": "2026-05-05T13:48:25.701913",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба AsusUpdateCheck отключена"
+  },
+  {
+    "timestamp": "2026-05-05T13:49:19.883839",
+    "level": "info",
+    "title": "Информация",
+    "message": "Служба RzActionSvc отключена"
+  }
+]

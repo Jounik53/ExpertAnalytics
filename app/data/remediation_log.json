@@ -1,0 +1,652 @@
+[
+  {
+    "timestamp": "2026-05-05T11:43:48.536440",
+    "action": "remove_startup",
+    "target": "MicrosoftEdgeAutoLaunch_E9B66341E0F7970F4E92D21F7BAA64E8",
+    "dry_run": true,
+    "success": true,
+    "details": {
+      "message": "[dry-run] удалить из автозапуска MicrosoftEdgeAutoLaunch_E9B66341E0F7970F4E92D21F7BAA64E8"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T11:44:21.077083",
+    "action": "remove_startup",
+    "target": "GoogleDriveFS",
+    "dry_run": true,
+    "success": true,
+    "details": {
+      "message": "[dry-run] удалить из автозапуска GoogleDriveFS"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T11:44:28.449705",
+    "action": "remove_startup",
+    "target": "EADM",
+    "dry_run": true,
+    "success": true,
+    "details": {
+      "message": "[dry-run] удалить из автозапуска EADM"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T11:44:33.466671",
+    "action": "remove_startup",
+    "target": "vkteams.desktop",
+    "dry_run": true,
+    "success": true,
+    "details": {
+      "message": "[dry-run] удалить из автозапуска vkteams.desktop"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T11:44:39.075994",
+    "action": "remove_startup",
+    "target": "SecurityHealth",
+    "dry_run": true,
+    "success": true,
+    "details": {
+      "message": "[dry-run] удалить из автозапуска SecurityHealth"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:16:43.377427",
+    "action": "remove_startup",
+    "target": "svg_file_op1",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Недостаточно прав для удаления автозапуска. Запустите приложение от имени администратора"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:18:42.417884",
+    "action": "remove_startup",
+    "target": "svg_file_op1",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'svg_file_op1' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:18:49.766743",
+    "action": "remove_startup",
+    "target": "svg_file_op2",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'svg_file_op2' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:18:54.363584",
+    "action": "remove_startup",
+    "target": "svg_file_op4",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'svg_file_op4' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:18:58.524782",
+    "action": "remove_startup",
+    "target": "svg_file_op3",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'svg_file_op3' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:19:02.971600",
+    "action": "remove_startup",
+    "target": "svg_file_op5",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'svg_file_op5' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:19:08.040255",
+    "action": "remove_startup",
+    "target": "svg_file_op6",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'svg_file_op6' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:19:13.155527",
+    "action": "remove_startup",
+    "target": "svg_file_op7",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'svg_file_op7' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:19:19.033289",
+    "action": "remove_startup",
+    "target": "Ollama.lnk",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Файл автозагрузки не найден"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:19:28.165994",
+    "action": "remove_startup",
+    "target": "LogMeIn Hamachi Ui",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'LogMeIn Hamachi Ui' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:19:32.664648",
+    "action": "remove_startup",
+    "target": "SunJavaUpdateSched",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'SunJavaUpdateSched' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:19:38.473538",
+    "action": "remove_startup",
+    "target": "SACMonitor",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'SACMonitor' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:19:48.170787",
+    "action": "remove_startup",
+    "target": "{EDF77C88-B613-457C-A4CF-EEC03584FC5A}",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска '{EDF77C88-B613-457C-A4CF-EEC03584FC5A}' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:20:00.083563",
+    "action": "remove_startup",
+    "target": "Application Restart #0",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'Application Restart #0' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:20:04.906230",
+    "action": "remove_startup",
+    "target": "vkteams.desktop",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'vkteams.desktop' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:20:09.064912",
+    "action": "remove_startup",
+    "target": "EADM",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'EADM' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:20:14.264971",
+    "action": "remove_startup",
+    "target": "GoogleDriveFS",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'GoogleDriveFS' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:20:18.886761",
+    "action": "remove_startup",
+    "target": "MicrosoftEdgeAutoLaunch_E9B66341E0F7970F4E92D21F7BAA64E8",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'MicrosoftEdgeAutoLaunch_E9B66341E0F7970F4E92D21F7BAA64E8' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:20:35.568192",
+    "action": "disable_startup",
+    "target": "hnetmon.lnk",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Файл автозагрузки не найден"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:20:44.207085",
+    "action": "disable_startup",
+    "target": "Synapse3",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'Synapse3' отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:25:29.918791",
+    "action": "open_in_explorer",
+    "target": "C:\\Users\\Jouni\\AppData\\Roaming\\Microsoft\\Windows\\Start",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Файл или папка не найдены"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:30:11.408463",
+    "action": "open_in_explorer",
+    "target": "C:\\Users\\Jouni\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Ollama.lnk",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Открыто в Проводнике: C:\\Users\\Jouni\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Ollama.lnk"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:32:30.294469",
+    "action": "terminate_process",
+    "target": "334408",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Не удалось завершить процесс 334408: (pid=334408)"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:33:11.442500",
+    "action": "terminate_process",
+    "target": "912080",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Процесс 912080 завершен"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:33:15.543435",
+    "action": "terminate_process",
+    "target": "822956",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Процесс 822956 завершен"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:34:44.123853",
+    "action": "disable_service",
+    "target": "AsusUpdateCheck",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба AsusUpdateCheck отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:36:54.309645",
+    "action": "stop_service",
+    "target": "AmneziaVPN-service",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Ошибка sc stop: [SC] ControlService: ®иЁЎЄ : 109:\n\nЉ ­ « Ўл« § Єалв.\n\n "
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:37:00.037056",
+    "action": "disable_service",
+    "target": "AmneziaVPN-service",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба AmneziaVPN-service отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:37:49.880937",
+    "action": "stop_service",
+    "target": "Razer Synapse Service",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Synapse Service остановлена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:37:53.999992",
+    "action": "stop_service",
+    "target": "Razer Chroma SDK Service",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Chroma SDK Service остановлена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T12:38:43.668232",
+    "action": "stop_service",
+    "target": "WdNisSvc",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Ошибка sc stop: [SC] OpenService: ®иЁЎЄ : 5:\n\nЋвЄ § ­® ў ¤®бвгЇҐ.\n\n "
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:37:13.173536",
+    "action": "remove_startup",
+    "target": "\\MicrosoftEdgeUpdateTaskMachineCore",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\MicrosoftEdgeUpdateTaskMachineCore' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:37:17.490655",
+    "action": "remove_startup",
+    "target": "\\MicrosoftEdgeUpdateTaskMachineUA",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\MicrosoftEdgeUpdateTaskMachineUA' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:37:22.030497",
+    "action": "remove_startup",
+    "target": "\\klcp_update",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\klcp_update' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:37:26.474747",
+    "action": "remove_startup",
+    "target": "\\EOSv3 Scheduler onLogOn",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\EOSv3 Scheduler onLogOn' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:37:30.897849",
+    "action": "remove_startup",
+    "target": "\\EOSv3 Scheduler onTime",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\EOSv3 Scheduler onTime' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:37:47.836486",
+    "action": "remove_startup",
+    "target": "\\CreateExplorerShellUnelevatedTask",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\CreateExplorerShellUnelevatedTask' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:37:53.791409",
+    "action": "remove_startup",
+    "target": "\\CCleaner Update",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\CCleaner Update' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:37:57.623421",
+    "action": "remove_startup",
+    "target": "\\CCleanerCrashReporting",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\CCleanerCrashReporting' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:38:01.718449",
+    "action": "remove_startup",
+    "target": "\\CCleanerSkipUAC - Jouni",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\CCleanerSkipUAC - Jouni' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:39:56.325558",
+    "action": "disable_startup",
+    "target": "\\Microsoft\\XblGameSave\\XblGameSaveTask",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Задача автозапуска '\\Microsoft\\XblGameSave\\XblGameSaveTask' отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:40:53.347242",
+    "action": "remove_startup",
+    "target": "Load",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'Load' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:41:01.454082",
+    "action": "remove_startup",
+    "target": "Shell",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Запись автозапуска 'Shell' удалена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:42:21.453558",
+    "action": "stop_service",
+    "target": "edgeupdate",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Ошибка sc stop: [SC] ControlService: ®иЁЎЄ : 1062:\n\n‘«г¦Ў  ­Ґ § ЇгйҐ­ .\n\n "
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:42:40.722072",
+    "action": "stop_service",
+    "target": "Hamachi2Svc",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Hamachi2Svc остановлена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:42:49.037015",
+    "action": "disable_service",
+    "target": "JetBrainsEtwHost.16",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба JetBrainsEtwHost.16 отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:42:59.947330",
+    "action": "disable_service",
+    "target": "KSDE5.22",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба KSDE5.22 отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:08.575046",
+    "action": "disable_service",
+    "target": "LMIGuardianSvc",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба LMIGuardianSvc отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:24.969596",
+    "action": "disable_service",
+    "target": "Razer Chroma SDK Server",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Chroma SDK Server отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:26.956493",
+    "action": "stop_service",
+    "target": "Razer Chroma SDK Server",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Chroma SDK Server остановлена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:30.018587",
+    "action": "disable_service",
+    "target": "Razer Chroma SDK Service",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Chroma SDK Service отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:31.651025",
+    "action": "stop_service",
+    "target": "Razer Chroma SDK Service",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Chroma SDK Service остановлена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:35.841392",
+    "action": "disable_service",
+    "target": "Razer Chroma Stream Server",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Chroma Stream Server отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:37.851145",
+    "action": "stop_service",
+    "target": "Razer Chroma Stream Server",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Chroma Stream Server остановлена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:40.440085",
+    "action": "stop_service",
+    "target": "Razer Game Manager Service",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Ошибка sc stop: [SC] ControlService: ®иЁЎЄ : 1051:\n\nЉ®¬ ­¤  ®бв ­®ўЄЁ Ўл«  ®вЇа ў«Ґ­  б«г¦ЎҐ, ®в Є®в®а®© § ўЁбпв ¤агЈЁҐ б«г¦Ўл.\n\n "
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:42.140975",
+    "action": "disable_service",
+    "target": "Razer Game Manager Service",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Game Manager Service отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:43:45.650022",
+    "action": "disable_service",
+    "target": "Razer Synapse Service",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба Razer Synapse Service отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:48:23.384274",
+    "action": "stop_service",
+    "target": "AsusUpdateCheck",
+    "dry_run": false,
+    "success": false,
+    "details": {
+      "message": "Ошибка sc stop: [SC] ControlService: ®иЁЎЄ : 1062:\n\n‘«г¦Ў  ­Ґ § ЇгйҐ­ .\n\n "
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:48:25.692641",
+    "action": "disable_service",
+    "target": "AsusUpdateCheck",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба AsusUpdateCheck отключена"
+    }
+  },
+  {
+    "timestamp": "2026-05-05T13:49:19.874684",
+    "action": "disable_service",
+    "target": "RzActionSvc",
+    "dry_run": false,
+    "success": true,
+    "details": {
+      "message": "Служба RzActionSvc отключена"
+    }
+  }
+]

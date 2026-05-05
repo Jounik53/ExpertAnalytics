@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  expertanalytics:
+    build: .
+    container_name: expertanalytics
+    env_file:
+      - .env
+    volumes:
+      - ./reports:/app/reports
+      - ./app/data:/app/app/data
+    command: ["python", "main.py"]
