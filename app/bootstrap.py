@@ -27,7 +27,7 @@ from app.ui.i18n import I18n
 from app.ui.event_store import UIEventStore
 from app.ui.main_window import MainWindow
 
-def build_app(mode: str | None = None) -> MainWindow:
+def build_app(mode: str | None = None, initial_raw: dict[str, object] | None = None, skip_warmup: bool = False) -> MainWindow:
     base_dir = Path(__file__).resolve().parent
     data_dir = base_dir / "data"
     configure_logging(data_dir / "expert_analytics.log")
@@ -74,6 +74,8 @@ def build_app(mode: str | None = None) -> MainWindow:
         log_analyzer_service=LogAnalyzerService(),
         event_store=UIEventStore(data_dir / "ui_events.json"),
         mode=effective_mode,
+        initial_raw=initial_raw,
+        skip_warmup=skip_warmup,
     )
 
 

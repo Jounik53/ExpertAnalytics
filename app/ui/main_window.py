@@ -6,6 +6,7 @@ import re
 import subprocess
 import threading
 import time
+from queue import Queue, Empty
 import webbrowser
 import tkinter as tk
 from urllib.parse import quote_plus
@@ -50,6 +51,8 @@ class MainWindow:
         log_analyzer_service: LogAnalyzerService,
         event_store: UIEventStore,
         mode: str = "general",
+        initial_raw: dict[str, object] | None = None,
+        skip_warmup: bool = False,
     ) -> None:
         self._scan_service = scan_service
         self._settings_service = settings_service
@@ -61,6 +64,8 @@ class MainWindow:
         self._log_analyzer = log_analyzer_service
         self._event_store = event_store
         self._mode = normalize_mode(mode)
+        self._initial_raw = dict(initial_raw or {})
+        self._skip_warmup = bool(skip_warmup)
         self._theme_service = ThemeService()
 
         self._settings = self._settings_service.load()
@@ -100,6 +105,10 @@ class MainWindow:
         self._vmem_metric_ts: float = 0.0
         self._switch_mode_callback = None
         self._warmup_busy = False
+        self._proc_refresh_version = 0
+        self._proc_row_by_pid: dict[int, str] = {}
+        self._proc_enrich_pending: dict[int, int] = {}
+        self._proc_patch_queue: Queue[tuple[int, str, dict[int, object]]] = Queue()
 
         self.root = tk.Tk()
         self.root.withdraw()
@@ -279,7 +288,29 @@ class MainWindow:
             self._restore_events()
         else:
             self._restore_events()
-        self.root.after(150, self._warmup_on_start)
+        if self._initial_raw:
+            self._apply_initial_raw_data()
+        if not self._skip_warmup:
+            self.root.after(150, self._warmup_on_start)
+
+    def _apply_initial_raw_data(self) -> None:
+        processes = self._initial_raw.get("processes")
+        startup = self._initial_raw.get("startup")
+        services = self._initial_raw.get("services")
+        drivers = self._initial_raw.get("drivers")
+
+        if isinstance(processes, list):
+            self._all_processes = list(processes)
+            self._apply_process_filters()
+        if isinstance(startup, list):
+            self._all_startup = list(startup)
+            self._refresh_startup_view()
+        if isinstance(services, list):
+            self._all_services = list(services)
+            self._refresh_services_view()
+        if isinstance(drivers, list):
+            self._all_drivers = list(drivers)
+            self._refresh_drivers_view()
 
     def _build_main_menu(self) -> None:
         menu_bar = tk.Menu(self.root, tearoff=0)
@@ -360,6 +391,8 @@ class MainWindow:
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 shell=False,
                 timeout=1800,
             )
@@ -399,6 +432,8 @@ class MainWindow:
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 shell=False,
                 timeout=2500,
             )
@@ -471,11 +506,15 @@ class MainWindow:
 
             if mode in {"general", "scanning", "processes", "heuristics"}:
                 processes = self._scan_service.scan_processes_only(high_mb, medium_mb)
+                self.root.after(0, lambda: self._start_status_animation("Фоновое обновление: процессы/цвета"))
             if mode in {"general", "services"}:
+                self.root.after(0, lambda: self._start_status_animation("Фоновое обновление: службы"))
                 services = self._scan_service.scan_services_only()
             if mode in {"general", "startup"}:
+                self.root.after(0, lambda: self._start_status_animation("Фоновое обновление: автозагрузка"))
                 startup = self._scan_service.scan_startup_only()
             if mode in {"general", "drivers"}:
+                self.root.after(0, lambda: self._start_status_animation("Фоновое обновление: драйверы"))
                 drivers = self._scan_service.scan_drivers_only()
 
             def _apply() -> None:
@@ -1353,6 +1392,7 @@ class MainWindow:
     def _apply_process_filters(self) -> None:
         self.process_tree.delete(*self.process_tree.get_children())
         self._row_index.clear()
+        self._proc_row_by_pid.clear()
         autorun_tokens = self._autorun_tokens()
 
         q = self.var_search.get().lower().strip()
@@ -1374,7 +1414,84 @@ class MainWindow:
             )
             iid = self.process_tree.insert("", tk.END, values=vals, tags=(self._memory_tag(rec.memory_mb),))
             self._row_index[iid] = rec
+            self._proc_row_by_pid[int(rec.pid)] = iid
         self._restore_tree_sort(self.process_tree)
+
+    def _render_processes_base(self, records: list[ProcessRecord], version: int) -> None:
+        if version != self._proc_refresh_version:
+            return
+        self.process_tree.delete(*self.process_tree.get_children())
+        self._row_index.clear()
+        self._proc_row_by_pid.clear()
+        q = self.var_search.get().lower().strip()
+        lvl = self.var_level.get().lower().strip() or "all"
+        for rec in records:
+            if lvl != "all" and rec.memory_level.value != lvl:
+                continue
+            if q and q not in rec.name.lower() and q not in rec.exe_path.lower() and q not in str(rec.pid):
+                continue
+            vals = (
+                rec.pid,
+                rec.name,
+                f"{rec.memory_mb:.1f} МБ",
+                self._level_ru(rec.memory_level.value),
+                rec.exe_path,
+                "...",
+                "...",
+                "...",
+            )
+            iid = self.process_tree.insert("", tk.END, values=vals)
+            self._row_index[iid] = rec
+            self._proc_row_by_pid[int(rec.pid)] = iid
+        self._restore_tree_sort(self.process_tree)
+
+    def _start_proc_stage(self, version: int, text: str) -> None:
+        if version != self._proc_refresh_version:
+            return
+        self._proc_enrich_pending[version] = self._proc_enrich_pending.get(version, 0) + 1
+        self._start_status_animation(text)
+
+    def _finish_proc_stage(self, version: int) -> None:
+        if version != self._proc_refresh_version:
+            return
+        remain = max(0, self._proc_enrich_pending.get(version, 1) - 1)
+        self._proc_enrich_pending[version] = remain
+        if remain == 0:
+            self._stop_status_animation("Список процессов обновлен")
+
+    def _enqueue_proc_patch(self, version: int, patch_kind: str, payload: dict[int, object]) -> None:
+        self._proc_patch_queue.put((version, patch_kind, payload))
+        self.root.after(0, self._apply_proc_patches)
+
+    def _apply_proc_patches(self) -> None:
+        while True:
+            try:
+                version, patch_kind, payload = self._proc_patch_queue.get_nowait()
+            except Empty:
+                break
+            if version != self._proc_refresh_version:
+                continue
+            for pid, value in payload.items():
+                iid = self._proc_row_by_pid.get(int(pid))
+                if not iid:
+                    continue
+                if patch_kind == "color":
+                    tag = self._memory_tag(float(value))
+                    self.process_tree.item(iid, tags=(tag,))
+                    continue
+                rec = self._row_index.get(iid)
+                if rec is None:
+                    continue
+                vals = list(self.process_tree.item(iid, "values"))
+                if len(vals) < 8:
+                    continue
+                if patch_kind == "autorun":
+                    vals[5] = str(value)
+                elif patch_kind == "heur":
+                    vals[6] = str(value)
+                elif patch_kind == "vt":
+                    vals[7] = str(value)
+                self.process_tree.item(iid, values=tuple(vals))
 
     def _fill_startup(self, snapshot) -> None:
         self._all_startup = list(snapshot.startup_entries)
@@ -2084,16 +2201,104 @@ class MainWindow:
     def action_refresh_processes(self, silent: bool = False) -> None:
         if self._warmup_is_running("Обновление процессов"):
             return
-        try:
-            settings = self._collect_settings()
-            records = self._scan_service.scan_processes_only(settings.process_high_mb, settings.process_medium_mb)
-            self._all_processes = list(records)
-            self._apply_process_filters()
-            if not silent:
-                self.status_var.set("Список процессов обновлен")
-                self._emit_event(EventLevel.INFO, "Информация", "Список процессов обновлен")
-        except Exception as exc:
-            self._handle_error("Ошибка обновления процессов", str(exc))
+        settings = self._collect_settings()
+        self._proc_refresh_version += 1
+        version = self._proc_refresh_version
+        self._proc_enrich_pending[version] = 0
+        self._start_status_animation("Фоновое обновление данных")
+
+        def _raw_fetch() -> None:
+            try:
+                records = self._scan_service.scan_processes_only(settings.process_high_mb, settings.process_medium_mb)
+            except Exception as exc:
+                self.root.after(0, lambda: self._handle_error("Ошибка обновления процессов", str(exc)))
+                return
+
+            def _apply_base() -> None:
+                if version != self._proc_refresh_version:
+                    return
+                self._all_processes = list(records)
+                self._render_processes_base(self._all_processes, version)
+                self._stop_status_animation("Сырые данные процессов получены")
+                self._run_process_enrichment(version, settings)
+
+            self.root.after(0, _apply_base)
+
+        threading.Thread(target=_raw_fetch, daemon=True).start()
+
+        if not silent:
+            self._emit_event(EventLevel.INFO, "Информация", "Запущено фоновое обновление процессов")
+
+    def _run_process_enrichment(self, version: int, settings: AppSettings) -> None:
+        records = list(self._all_processes)
+
+        self._start_proc_stage(version, "Фоновое обновление: цвета процессов")
+
+        def _colors_worker() -> None:
+            payload = {int(r.pid): float(r.memory_mb) for r in records}
+            self._enqueue_proc_patch(version, "color", payload)
+            self.root.after(0, lambda: self._finish_proc_stage(version))
+
+        threading.Thread(target=_colors_worker, daemon=True).start()
+
+        self._start_proc_stage(version, "Фоновое обновление: автозагрузка процессов")
+
+        def _autorun_worker() -> None:
+            tokens = self._autorun_tokens()
+            payload: dict[int, object] = {}
+            for rec in records:
+                name = (rec.name or "").lower()
+                exe = Path(rec.exe_path).name.lower() if rec.exe_path else ""
+                payload[int(rec.pid)] = "Да" if name in tokens or exe in tokens else "Нет"
+            self._enqueue_proc_patch(version, "autorun", payload)
+            self.root.after(0, lambda: self._finish_proc_stage(version))
+
+        threading.Thread(target=_autorun_worker, daemon=True).start()
+
+        if settings.heuristics_enabled:
+            self._start_proc_stage(version, "Фоновое обновление: эвристика процессов")
+
+            def _heur_worker() -> None:
+                enabled_map = settings.heuristic_rules or self._heuristics.schema()
+                payload: dict[int, object] = {}
+                for rec in records:
+                    score = 0
+                    hits: list[str] = []
+                    for rule in self._heuristics.rules:
+                        if not enabled_map.get(rule.rule_id, True):
+                            continue
+                        delta, msg = rule.evaluate(rec)
+                        if delta > 0 and msg:
+                            score += delta
+                            hits.append(f"{rule.title}: {msg}")
+                    rec.heuristic_score = min(100, score)
+                    rec.heuristic_hits = hits
+                    payload[int(rec.pid)] = self._heur_summary(rec)
+                self._enqueue_proc_patch(version, "heur", payload)
+                self.root.after(0, lambda: self._finish_proc_stage(version))
+
+            threading.Thread(target=_heur_worker, daemon=True).start()
+
+        if settings.enable_vt_lookup:
+            self._start_proc_stage(version, "Фоновое обновление: VirusTotal процессов")
+
+            def _vt_worker() -> None:
+                payload: dict[int, object] = {}
+                for rec in records:
+                    if version != self._proc_refresh_version:
+                        return
+                    if not rec.file_sha256:
+                        payload[int(rec.pid)] = "нет данных"
+                        continue
+                    try:
+                        rec.vt_result = self._scan_service.lookup_sha256(rec.file_sha256)
+                    except Exception:
+                        rec.vt_result = None
+                    payload[int(rec.pid)] = self._vt_summary(rec)
+                self._enqueue_proc_patch(version, "vt", payload)
+                self.root.after(0, lambda: self._finish_proc_stage(version))
+
+            threading.Thread(target=_vt_worker, daemon=True).start()
 
     def action_disable_startup(self) -> None:
         rec = self._selected_startup()
@@ -2242,6 +2447,8 @@ class MainWindow:
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script, service_name],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 shell=False,
                 timeout=3500,
             )

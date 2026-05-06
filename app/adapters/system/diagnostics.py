@@ -64,7 +64,16 @@ class WindowsDiagnosticsCollector(DiagnosticsPort):
             f"(Get-Counter '{counter_path}').CounterSamples[0].CookedValue",
         ]
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, shell=False, timeout=10)
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                shell=False,
+                timeout=10,
+            )
+
             if proc.returncode != 0:
                 return 0.0
             value = float(proc.stdout.strip().splitlines()[-1])

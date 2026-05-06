@@ -75,11 +75,11 @@ class WindowsSystemActions(SystemActionPort):
     def stop_service(self, service_name: str) -> ActionResult:
         if self.dry_run:
             return ActionResult(ok=True, message=f"[dry-run] остановить службу {service_name}")
-        result = subprocess.run(["sc", "stop", service_name], capture_output=True, text=True, shell=False)
+        result = subprocess.run(["sc", "stop", service_name], capture_output=True, text=True, encoding="utf-8", errors="replace", shell=False)
         if result.returncode == 0:
             return ActionResult(ok=True, message=f"Служба {service_name} остановлена")
         ps_cmd = f"Stop-Service -Name '{service_name}' -ErrorAction Stop"
-        ps = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, text=True, shell=False)
+        ps = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, text=True, encoding="utf-8", errors="replace", shell=False)
         if ps.returncode == 0:
             return ActionResult(ok=True, message=f"Служба {service_name} остановлена")
         return ActionResult(ok=False, message=f"Ошибка остановки службы: {result.stdout} {result.stderr} {ps.stdout} {ps.stderr}")
@@ -91,12 +91,14 @@ class WindowsSystemActions(SystemActionPort):
             ["sc", "config", service_name, "start=", "disabled"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             shell=False,
         )
         if result.returncode == 0:
             return ActionResult(ok=True, message=f"Служба {service_name} отключена")
         ps_cmd = f"Set-Service -Name '{service_name}' -StartupType Disabled -ErrorAction Stop"
-        ps = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, text=True, shell=False)
+        ps = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, text=True, encoding="utf-8", errors="replace", shell=False)
         if ps.returncode == 0:
             return ActionResult(ok=True, message=f"Служба {service_name} отключена")
         return ActionResult(ok=False, message=f"Ошибка отключения службы: {result.stdout} {result.stderr} {ps.stdout} {ps.stderr}")
@@ -108,7 +110,7 @@ class WindowsSystemActions(SystemActionPort):
         if uninstall_cmd:
             cmd = uninstall_cmd.strip()
             try:
-                completed = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+                completed = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", shell=True)
                 if completed.returncode == 0:
                     return ActionResult(ok=True, message="Деинсталлятор выполнен успешно")
                 return ActionResult(ok=False, message=f"Ошибка деинсталлятора: {completed.stdout} {completed.stderr}")
@@ -206,14 +208,14 @@ class WindowsSystemActions(SystemActionPort):
 
     def _toggle_scheduled_task(self, entry: StartupEntry, enabled: bool) -> ActionResult:
         cmd = ["schtasks", "/Change", "/TN", entry.name, "/ENABLE" if enabled else "/DISABLE"]
-        result = subprocess.run(cmd, capture_output=True, text=True, shell=False)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", shell=False)
         if result.returncode == 0:
             state = "включена" if enabled else "отключена"
             return ActionResult(ok=True, message=f"Задача автозапуска '{entry.name}' {state}")
         return ActionResult(ok=False, message=f"Ошибка изменения задачи: {result.stdout} {result.stderr}")
 
     def _remove_scheduled_task(self, entry: StartupEntry) -> ActionResult:
-        result = subprocess.run(["schtasks", "/Delete", "/TN", entry.name, "/F"], capture_output=True, text=True, shell=False)
+        result = subprocess.run(["schtasks", "/Delete", "/TN", entry.name, "/F"], capture_output=True, text=True, encoding="utf-8", errors="replace", shell=False)
         if result.returncode == 0:
             return ActionResult(ok=True, message=f"Задача автозапуска '{entry.name}' удалена")
         return ActionResult(ok=False, message=f"Ошибка удаления задачи: {result.stdout} {result.stderr}")
@@ -233,6 +235,8 @@ class WindowsSystemActions(SystemActionPort):
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script, binding_path],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             shell=False,
         )
         if result.returncode == 0:
