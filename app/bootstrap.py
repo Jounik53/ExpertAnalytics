@@ -27,7 +27,13 @@ from app.ui.event_store import UIEventStore
 from app.ui.main_window import MainWindow
 
 
-def build_app() -> MainWindow:
+def _normalize_mode(value: str | None) -> str:
+    mode = str(value or "general").strip().lower()
+    allowed = {"general", "scanning", "processes", "startup", "services", "drivers", "heuristics"}
+    return mode if mode in allowed else "general"
+
+
+def build_app(mode: str | None = None) -> MainWindow:
     base_dir = Path(__file__).resolve().parent
     data_dir = base_dir / "data"
     configure_logging(data_dir / "expert_analytics.log")
@@ -61,6 +67,8 @@ def build_app() -> MainWindow:
 
     effective_locale = settings.locale_code or os.getenv("DEFAULT_LOCALE", "ru")
 
+    effective_mode = _normalize_mode(mode or settings.startup_mode)
+
     return MainWindow(
         scan_service=scan_service,
         settings_service=settings_service,
@@ -71,6 +79,7 @@ def build_app() -> MainWindow:
         report_insight_service=ReportInsightService(),
         log_analyzer_service=LogAnalyzerService(),
         event_store=UIEventStore(data_dir / "ui_events.json"),
+        mode=effective_mode,
     )
 
 

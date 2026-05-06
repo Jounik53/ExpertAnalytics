@@ -26,6 +26,8 @@ class AppSettings:
     heuristics_enabled: bool = True
     heuristic_rules: dict[str, bool] | None = None
     ui_theme: str = "dark"
+    startup_mode: str = "general"
+    exe_build_enabled: bool = True
 
 
 class SettingsService:
@@ -36,6 +38,12 @@ class SettingsService:
     def _normalize_theme(value: str | None) -> str:
         theme = str(value or "dark").strip().lower()
         return "light" if theme == "light" else "dark"
+
+    @staticmethod
+    def _normalize_mode(value: str | None) -> str:
+        mode = str(value or "general").strip().lower()
+        allowed = {"general", "scanning", "processes", "startup", "services", "drivers", "heuristics"}
+        return mode if mode in allowed else "general"
 
     def load(self) -> AppSettings:
         raw = self._repo.load()
@@ -57,6 +65,8 @@ class SettingsService:
             heuristics_enabled=bool(raw.get("heuristics_enabled", True)),
             heuristic_rules=dict(raw.get("heuristic_rules", {})) if isinstance(raw.get("heuristic_rules", {}), dict) else {},
             ui_theme=self._normalize_theme(raw.get("ui_theme", "dark")),
+            startup_mode=self._normalize_mode(raw.get("startup_mode", "general")),
+            exe_build_enabled=bool(raw.get("exe_build_enabled", True)),
         )
 
     def save(self, settings: AppSettings) -> None:
@@ -79,5 +89,7 @@ class SettingsService:
                 "heuristics_enabled": settings.heuristics_enabled,
                 "heuristic_rules": settings.heuristic_rules or {},
                 "ui_theme": self._normalize_theme(settings.ui_theme),
+                "startup_mode": self._normalize_mode(settings.startup_mode),
+                "exe_build_enabled": settings.exe_build_enabled,
             }
         )

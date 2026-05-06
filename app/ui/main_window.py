@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import threading
-import ctypes
 import time
 import webbrowser
 import hashlib
-from ctypes import wintypes
 import tkinter as tk
 from urllib.parse import quote_plus
 from collections import defaultdict
@@ -34,6 +33,18 @@ from app.ui.notifications import EventLevel, UINotifier
 
 
 MAX_LIVE_REPORT_LINES = 1200
+MODE_LABELS = {
+    "general": "Общий",
+    "scanning": "Сканирование",
+    "processes": "Процессы",
+    "startup": "Автозагрузка",
+    "services": "Службы",
+    "drivers": "Драйверы",
+    "heuristics": "Эвристика",
+}
+MODE_ORDER = ["general", "scanning", "processes", "startup", "services", "drivers", "heuristics"]
+MODE_LABEL_TO_ID = {v: k for k, v in MODE_LABELS.items()}
+APP_VERSION = os.getenv("EXPERT_ANALYTICS_VERSION", "0.1.0")
 
 
 class MainWindow:
@@ -80,6 +91,7 @@ class MainWindow:
         report_insight_service: ReportInsightService,
         log_analyzer_service: LogAnalyzerService,
         event_store: UIEventStore,
+        mode: str = "general",
     ) -> None:
         self._scan_service = scan_service
         self._settings_service = settings_service
@@ -90,6 +102,7 @@ class MainWindow:
         self._insight = report_insight_service
         self._log_analyzer = log_analyzer_service
         self._event_store = event_store
+        self._mode = self._normalize_mode(mode)
 
         self._settings = self._settings_service.load()
         self._exe_builder = ExeBuildService()
@@ -126,20 +139,43 @@ class MainWindow:
         self._gpu_metric_ts: float = 0.0
         self._vmem_metric_cache: float | None = None
         self._vmem_metric_ts: float = 0.0
+        self._switch_mode_callback = None
+        self._warmup_busy = False
 
         self.root = tk.Tk()
+        self.root.withdraw()
         self.root.title(self._i18n.t("app.title"))
-        self.root.geometry("1620x980")
-        self.root.minsize(1200, 760)
-        self._is_maximized = False
-        self._normal_geometry = self.root.geometry()
-        self._drag_origin: tuple[int, int, int, int] | None = None
-        self.root.overrideredirect(True)
-        self.root.bind("<Map>", self._on_root_map, add="+")
-        self.root.bind("<Configure>", self._on_root_configure, add="+")
+        self.root.minsize(900, 560)
+        self._place_window_top(1080, 653)
         self._build_style()
         self._init_variables()
         self._build()
+        self.root.deiconify()
+
+    def _place_window_top(self, width: int, height: int) -> None:
+        sw = max(1, int(self.root.winfo_screenwidth()))
+        sh = max(1, int(self.root.winfo_screenheight()))
+        w = min(int(width), sw)
+        h = min(int(height), sh)
+        x = max(0, (sw - w) // 2)
+        y = 0
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
+
+    @staticmethod
+    def _normalize_mode(mode: str | None) -> str:
+        value = str(mode or "general").strip().lower()
+        return value if value in MODE_LABELS else "general"
+
+    def set_mode_switch_callback(self, callback) -> None:
+        self._switch_mode_callback = callback
+
+    @staticmethod
+    def _mode_label(mode: str | None) -> str:
+        return MODE_LABELS.get(str(mode or "").strip().lower(), MODE_LABELS["general"])
+
+    @staticmethod
+    def _mode_id_from_label(label: str | None) -> str:
+        return MODE_LABEL_TO_ID.get(str(label or "").strip(), "general")
 
     def _build_style(self) -> None:
         style = ttk.Style()
@@ -171,13 +207,11 @@ class MainWindow:
                         darkcolor=c["border"],
                         troughcolor=c["panel_alt"])
         style.configure("TFrame", background=c["bg"])
-        style.configure("Titlebar.TFrame", background=c["panel_alt"], bordercolor=c["border"])
         style.configure("TNotebook", background=c["bg"], bordercolor=c["border"])
         style.configure("TNotebook.Tab", background=c["panel_alt"], foreground=c["text"], padding=(10, 6))
         style.map("TNotebook.Tab", background=[("selected", c["panel"])], foreground=[("selected", c["text"]), ("!selected", c["muted_text"])])
 
         style.configure("TLabel", background=c["bg"], foreground=c["text"])
-        style.configure("Titlebar.TLabel", background=c["panel_alt"], foreground=c["text"], font=("Segoe UI", 10, "bold"))
         style.configure("Statusbar.TFrame", background=c["panel_alt"], bordercolor=c["border"])
         style.configure("Status.TLabel", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"])
         style.configure("Header.TLabel", background=c["bg"], foreground=c["text"], font=("Segoe UI", 10, "bold"))
@@ -188,11 +222,6 @@ class MainWindow:
         style.map("TButton",
                   background=[("active", c["panel"]), ("pressed", c["panel"])],
                   foreground=[("disabled", c["muted_text"]), ("!disabled", c["text"])])
-        style.configure("Titlebar.TButton", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"], padding=(8, 4), focusthickness=0)
-        style.map("Titlebar.TButton", background=[("active", c["panel"]), ("pressed", c["panel"]), ("!active", c["panel_alt"])], foreground=[("!disabled", c["text"])])
-        style.configure("TitlebarClose.TButton", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"], padding=(8, 4), focusthickness=0)
-        style.map("TitlebarClose.TButton", background=[("active", "#b63d4a"), ("pressed", "#9f2f3b"), ("!active", c["panel_alt"])], foreground=[("!disabled", "#ffffff")])
-
         style.configure("TEntry", fieldbackground=c["input_bg"], foreground=c["text"], bordercolor=c["border"], insertcolor=c["text"])
         style.configure("TCombobox", fieldbackground=c["input_bg"], background=c["input_bg"], foreground=c["text"], arrowcolor=c["text"], bordercolor=c["border"])
         style.map("TCombobox",
@@ -259,7 +288,7 @@ class MainWindow:
                 self.status_metrics.configure(style="Statusbar.TFrame")
             except tk.TclError:
                 pass
-            for lbl_name in ["metric_ram", "metric_vmem", "metric_vram", "metric_cpu"]:
+            for lbl_name in ["metric_ram", "metric_cpu"]:
                 lbl = getattr(self, lbl_name, None)
                 if lbl is not None:
                     try:
@@ -273,7 +302,6 @@ class MainWindow:
 
         if hasattr(self, "status_var"):
             self.root.update_idletasks()
-        self._apply_rounded_corners()
 
     def _init_variables(self) -> None:
         self.var_high = tk.IntVar(value=self._settings.process_high_mb)
@@ -292,6 +320,8 @@ class MainWindow:
         self.var_theme = tk.StringVar(value=self._normalize_theme(self._settings.ui_theme))
         self.var_cpu_limit = tk.IntVar(value=self._settings.cpu_limit_percent)
         self.var_heuristics_enabled = tk.BooleanVar(value=self._settings.heuristics_enabled)
+        self.var_startup_mode = tk.StringVar(value=self._mode_label(self._settings.startup_mode))
+        self.var_exe_build_enabled = tk.BooleanVar(value=self._settings.exe_build_enabled)
         self.var_show_disabled_services = tk.BooleanVar(value=True)
         self.var_show_disabled_startup = tk.BooleanVar(value=True)
 
@@ -305,7 +335,7 @@ class MainWindow:
         self.build_status = tk.StringVar(value="Ожидание сборки")
 
     def _build(self) -> None:
-        self._build_custom_titlebar()
+        self._build_main_menu()
         self._build_header_controls()
 
         self.notebook = ttk.Notebook(self.root)
@@ -324,7 +354,7 @@ class MainWindow:
         self.frame_diagnostics = ttk.Frame(self.notebook)
         self.frame_sampling = ttk.Frame(self.notebook)
 
-        self.notebook.add(self.frame_dashboard, text="Обзор")
+        self.notebook.add(self.frame_dashboard, text="Сканирование")
         self.notebook.add(self.frame_processes, text="Процессы")
         self.notebook.add(self.frame_startup, text="Автозагрузка")
         self.notebook.add(self.frame_services, text="Службы")
@@ -361,21 +391,43 @@ class MainWindow:
         self.status_metrics.place(relx=0.5, rely=0.5, anchor="center")
 
         self.metric_ram = tk.Label(self.status_metrics, text="RAM: -", font=("Segoe UI", 9, "bold"), padx=8, pady=1, bd=1, relief=tk.SOLID)
-        self.metric_vmem = tk.Label(self.status_metrics, text="Вирт: -", font=("Segoe UI", 9, "bold"), padx=8, pady=1, bd=1, relief=tk.SOLID)
-        self.metric_vram = tk.Label(self.status_metrics, text="VRAM: -", font=("Segoe UI", 9, "bold"), padx=8, pady=1, bd=1, relief=tk.SOLID)
         self.metric_cpu = tk.Label(self.status_metrics, text="CPU: -", font=("Segoe UI", 9, "bold"), padx=8, pady=1, bd=1, relief=tk.SOLID)
         self.metric_ram.pack(side=tk.LEFT)
-        self.metric_vmem.pack(side=tk.LEFT)
-        self.metric_vram.pack(side=tk.LEFT)
         self.metric_cpu.pack(side=tk.LEFT)
+
+        self.version_label = ttk.Label(self.status_bar, text=f"v{APP_VERSION}", style="Status.TLabel", anchor=tk.E, padding=(8, 4))
+        self.version_label.pack(side=tk.RIGHT)
 
         self._apply_theme(self._current_theme)
         self._start_metrics_updater()
+        self._apply_mode_layout()
 
-        self.load_reports()
-        self._sync_module_info()
-        self._restore_events()
+        if self._mode == "general":
+            self.load_reports()
+            self._sync_module_info()
+            self._restore_events()
+        else:
+            self._restore_events()
         self.root.after(150, self._warmup_on_start)
+
+    def _build_main_menu(self) -> None:
+        menu_bar = tk.Menu(self.root, tearoff=0)
+
+        app_menu = tk.Menu(menu_bar, tearoff=0)
+        app_menu.add_command(label="Закрыть приложение", command=self._close_window)
+        menu_bar.add_cascade(label="Меню", menu=app_menu)
+
+        modes_menu = tk.Menu(menu_bar, tearoff=0)
+        for mode in MODE_ORDER:
+            modes_menu.add_command(label=MODE_LABELS[mode], command=lambda m=mode: self._open_mode_from_menu(m))
+        menu_bar.add_cascade(label="Режимы", menu=modes_menu)
+
+        if self._mode != "general":
+            settings_menu = tk.Menu(menu_bar, tearoff=0)
+            settings_menu.add_command(label="Открыть настройки", command=self._open_settings_from_menu)
+            menu_bar.add_cascade(label="Настройки", menu=settings_menu)
+
+        self.root.configure(menu=menu_bar)
 
     def _start_metrics_updater(self) -> None:
         psutil.cpu_percent(interval=None)
@@ -391,16 +443,12 @@ class MainWindow:
             ram = psutil.virtual_memory().percent
         except Exception:
             ram = None
-        vmem = self._virtual_memory_percent_cached()
         try:
             cpu = psutil.cpu_percent(interval=None)
         except Exception:
             cpu = None
-        vram = self._gpu_vram_percent_cached()
 
         self._set_metric(self.metric_ram, "RAM", ram)
-        self._set_metric(self.metric_vmem, "Вирт", vmem)
-        self._set_metric(self.metric_vram, "VRAM", vram)
         self._set_metric(self.metric_cpu, "CPU", cpu)
 
     def _set_metric(self, label: tk.Label, title: str, value: float | None) -> None:
@@ -528,71 +576,6 @@ class MainWindow:
         if final_text is not None:
             self.status_var.set(final_text)
 
-    def _build_custom_titlebar(self) -> None:
-        self.titlebar = ttk.Frame(self.root, style="Titlebar.TFrame", padding=(10, 6))
-        self.titlebar.pack(fill=tk.X, side=tk.TOP)
-
-        self.title_label = ttk.Label(self.titlebar, text=self._i18n.t("app.title"), style="Titlebar.TLabel")
-        self.title_label.pack(side=tk.LEFT)
-
-        btns = ttk.Frame(self.titlebar, style="Titlebar.TFrame")
-        btns.pack(side=tk.RIGHT)
-
-        self.btn_min = ttk.Button(btns, text="_", width=3, style="Titlebar.TButton", command=self._minimize_window)
-        self.btn_max = ttk.Button(btns, text="[]", width=3, style="Titlebar.TButton", command=self._toggle_maximize)
-        self.btn_close = ttk.Button(btns, text="X", width=3, style="TitlebarClose.TButton", command=self._close_window)
-        self.btn_min.pack(side=tk.LEFT, padx=(0, 4))
-        self.btn_max.pack(side=tk.LEFT, padx=(0, 4))
-        self.btn_close.pack(side=tk.LEFT)
-
-        for widget in (self.titlebar, self.title_label):
-            widget.bind("<ButtonPress-1>", self._start_window_drag)
-            widget.bind("<B1-Motion>", self._do_window_drag)
-            widget.bind("<Double-Button-1>", lambda _e: self._toggle_maximize())
-
-    def _start_window_drag(self, event) -> None:
-        if self._is_maximized:
-            return
-        self._drag_origin = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
-
-    def _do_window_drag(self, event) -> None:
-        if self._drag_origin is None or self._is_maximized:
-            return
-        start_x, start_y, win_x, win_y = self._drag_origin
-        dx = event.x_root - start_x
-        dy = event.y_root - start_y
-        self.root.geometry(f"+{win_x + dx}+{win_y + dy}")
-
-    def _toggle_maximize(self) -> None:
-        if self._is_maximized:
-            self._restore_window()
-        else:
-            self._maximize_window()
-
-    def _maximize_window(self) -> None:
-        self._normal_geometry = self.root.geometry()
-        left, top, right, bottom = self._work_area()
-        width = max(800, right - left)
-        height = max(600, bottom - top)
-        self.root.geometry(f"{width}x{height}+{left}+{top}")
-        self._is_maximized = True
-        self._update_maximize_button()
-        self._apply_rounded_corners()
-
-    def _restore_window(self) -> None:
-        self.root.geometry(self._normal_geometry)
-        self._is_maximized = False
-        self._update_maximize_button()
-        self._apply_rounded_corners()
-
-    def _update_maximize_button(self) -> None:
-        if hasattr(self, "btn_max"):
-            self.btn_max.configure(text="<>" if self._is_maximized else "[]")
-
-    def _minimize_window(self) -> None:
-        self.root.overrideredirect(False)
-        self.root.iconify()
-
     def _close_window(self) -> None:
         if self._metrics_after_id is not None:
             try:
@@ -603,52 +586,33 @@ class MainWindow:
         self._stop_status_animation()
         self.root.destroy()
 
-    def _on_root_map(self, _event) -> None:
-        if self.root.state() != "iconic":
-            self.root.overrideredirect(True)
-            self._apply_rounded_corners()
-
-    def _on_root_configure(self, _event) -> None:
-        if not self._is_maximized:
-            self._normal_geometry = self.root.geometry()
-        self._apply_rounded_corners()
-
-    @staticmethod
-    def _work_area() -> tuple[int, int, int, int]:
-        if os.name != "nt":
-            return 0, 0, 1600, 900
-        try:
-            rect = wintypes.RECT()
-            SPI_GETWORKAREA = 48
-            ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
-            return rect.left, rect.top, rect.right, rect.bottom
-        except Exception:
-            return 0, 0, 1600, 900
-
-    def _apply_rounded_corners(self) -> None:
-        if os.name != "nt":
-            return
-        try:
-            self.root.update_idletasks()
-            width = max(1, self.root.winfo_width())
-            height = max(1, self.root.winfo_height())
-            radius = 0 if self._is_maximized else 16
-            hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, radius, radius)
-            ctypes.windll.user32.SetWindowRgn(self.root.winfo_id(), hrgn, True)
-        except Exception:
-            return
-
     def _warmup_on_start(self) -> None:
+        if self._warmup_busy:
+            return
         settings = self._collect_settings()
+        self._warmup_busy = True
         self._start_status_animation("Фоновое обновление данных")
-        threading.Thread(target=self._warmup_worker, args=(settings.process_high_mb, settings.process_medium_mb), daemon=True).start()
+        threading.Thread(
+            target=self._warmup_worker,
+            args=(settings.process_high_mb, settings.process_medium_mb, self._mode),
+            daemon=True,
+        ).start()
 
-    def _warmup_worker(self, high_mb: int, medium_mb: int) -> None:
+    def _warmup_worker(self, high_mb: int, medium_mb: int, mode: str) -> None:
         try:
-            processes = self._scan_service.scan_processes_only(high_mb, medium_mb)
-            services = self._scan_service.scan_services_only()
-            startup = self._scan_service.scan_startup_only()
-            drivers = self._scan_service.scan_drivers_only()
+            processes = []
+            services = []
+            startup = []
+            drivers = []
+
+            if mode in {"general", "scanning", "processes", "heuristics"}:
+                processes = self._scan_service.scan_processes_only(high_mb, medium_mb)
+            if mode in {"general", "services"}:
+                services = self._scan_service.scan_services_only()
+            if mode in {"general", "startup"}:
+                startup = self._scan_service.scan_startup_only()
+            if mode in {"general", "drivers"}:
+                drivers = self._scan_service.scan_drivers_only()
 
             def _apply() -> None:
                 self._all_processes = list(processes)
@@ -657,16 +621,24 @@ class MainWindow:
                 self._all_drivers = list(drivers)
 
                 proc_snapshot = type("Snapshot", (), {"process_records": self._all_processes, "service_records": self._all_services, "startup_entries": self._all_startup, "driver_records": self._all_drivers})
-                self._apply_process_filters()
-                self._fill_services(proc_snapshot)
-                self._fill_startup(proc_snapshot)
-                self._fill_drivers(proc_snapshot)
+                if mode in {"general", "scanning", "processes", "heuristics"}:
+                    self._apply_process_filters()
+                if mode in {"general", "services"}:
+                    self._fill_services(proc_snapshot)
+                if mode in {"general", "startup"}:
+                    self._fill_startup(proc_snapshot)
+                if mode in {"general", "drivers"}:
+                    self._fill_drivers(proc_snapshot)
 
             self.root.after(0, _apply)
         except Exception as exc:
             self.root.after(0, lambda: self._handle_error("Ошибка фонового обновления", str(exc)))
         finally:
-            self.root.after(0, lambda: self._stop_status_animation("Готово"))
+            self.root.after(0, self._finish_warmup)
+
+    def _finish_warmup(self) -> None:
+        self._warmup_busy = False
+        self._stop_status_animation("Готово")
 
     def _attach_scrollbars(self, widget) -> None:
         parent = widget.master
@@ -767,30 +739,83 @@ class MainWindow:
 
         return (3, text)
 
+    def _active_mode_label(self) -> str:
+        return MODE_LABELS.get(self._mode, MODE_LABELS["general"])
+
+    def _mode_to_tab_frame(self):
+        mapping = {
+            "scanning": getattr(self, "frame_dashboard", None),
+            "processes": getattr(self, "frame_processes", None),
+            "startup": getattr(self, "frame_startup", None),
+            "services": getattr(self, "frame_services", None),
+            "drivers": getattr(self, "frame_drivers", None),
+            "heuristics": getattr(self, "frame_processes", None),
+            "general": getattr(self, "frame_dashboard", None),
+        }
+        return mapping.get(self._mode)
+
+    def _apply_mode_layout(self) -> None:
+        if self._mode == "general":
+            return
+
+        tab_count = self.notebook.index("end")
+        for idx in range(tab_count - 1, -1, -1):
+            self.notebook.forget(idx)
+
+        tab = self._mode_to_tab_frame()
+        if tab is not None:
+            self.notebook.add(tab, text=self._active_mode_label())
+
+    def _open_mode_from_menu(self, mode: str) -> None:
+        normalized = self._normalize_mode(mode)
+        if normalized == self._mode:
+            return
+        if callable(self._switch_mode_callback):
+            self._switch_mode_callback(normalized)
+            self._close_window()
+
+    def _open_settings_from_menu(self) -> None:
+        if self._mode == "general":
+            return
+        try:
+            idx = self.notebook.index(self.frame_settings)
+        except Exception:
+            self.notebook.add(self.frame_settings, text="Настройки")
+            idx = self.notebook.index(self.frame_settings)
+        self.notebook.select(idx)
+
     def _build_header_controls(self) -> None:
         head = ttk.Frame(self.root)
         head.pack(fill=tk.X, padx=10, pady=(10, 4))
 
         scan_box = ttk.LabelFrame(head, text="Сканирование")
-        scan_box.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        if self._mode in {"general", "scanning"}:
+            scan_box.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
 
-        ttk.Button(scan_box, text="Запустить сканирование", command=self.scan).grid(row=0, column=0, padx=4, pady=4)
-        ttk.Button(scan_box, text="Пауза/Продолжить", command=self.toggle_scan_pause).grid(row=0, column=1, padx=4, pady=4)
-        ttk.Button(scan_box, text="Стоп", command=self.stop_scan).grid(row=0, column=2, padx=4, pady=4)
+            ttk.Button(scan_box, text="Запустить сканирование", command=self.scan).grid(row=0, column=0, padx=4, pady=4)
+            ttk.Button(scan_box, text="Пауза/Продолжить", command=self.toggle_scan_pause).grid(row=0, column=1, padx=4, pady=4)
+            ttk.Button(scan_box, text="Стоп", command=self.stop_scan).grid(row=0, column=2, padx=4, pady=4)
 
-        self.scan_progressbar = ttk.Progressbar(scan_box, maximum=100, variable=self.scan_progress)
-        self.scan_progressbar.grid(row=1, column=0, columnspan=4, sticky="ew", padx=4)
-        ttk.Label(scan_box, textvariable=self.scan_status).grid(row=2, column=0, columnspan=4, sticky=tk.W, padx=4, pady=(2, 4))
+            self.scan_progressbar = ttk.Progressbar(scan_box, maximum=100, variable=self.scan_progress)
+            self.scan_progressbar.grid(row=1, column=0, columnspan=4, sticky="ew", padx=4)
+            ttk.Label(scan_box, textvariable=self.scan_status).grid(row=2, column=0, columnspan=4, sticky=tk.W, padx=4, pady=(2, 4))
 
         build_box = ttk.LabelFrame(head, text="Сборка EXE")
-        build_box.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        if self._settings.exe_build_enabled and self._mode == "general":
+            build_box.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        ttk.Button(build_box, text="Собрать EXE", command=self.build_exe).grid(row=0, column=0, padx=4, pady=4)
-        ttk.Progressbar(build_box, maximum=100, variable=self.build_progress).grid(row=1, column=0, sticky="ew", padx=4)
-        ttk.Label(build_box, textvariable=self.build_status).grid(row=2, column=0, sticky=tk.W, padx=4, pady=(2, 4))
+            ttk.Button(build_box, text="Собрать EXE", command=self.build_exe).grid(row=0, column=0, padx=4, pady=4)
+            ttk.Progressbar(build_box, maximum=100, variable=self.build_progress).grid(row=1, column=0, sticky="ew", padx=4)
+            ttk.Label(build_box, textvariable=self.build_status).grid(row=2, column=0, sticky=tk.W, padx=4, pady=(2, 4))
 
         scan_box.columnconfigure(3, weight=1)
         build_box.columnconfigure(0, weight=1)
+
+    def _warmup_is_running(self, action_label: str) -> bool:
+        if self._warmup_busy:
+            self.status_var.set(f"{action_label} недоступно: идет фоновая загрузка")
+            return True
+        return False
 
     def _build_dashboard_tab(self) -> None:
         top = ttk.Frame(self.frame_dashboard)
@@ -1151,12 +1176,32 @@ class MainWindow:
         ttk.Checkbutton(tab_general, text="Включить сэмплинг", variable=self.var_sampling_enabled).grid(row=row, column=0, columnspan=2, sticky=tk.W, padx=6, pady=4)
         row += 1
 
+        ttk.Label(tab_general, text="Режим запуска по умолчанию").grid(row=row, column=0, sticky=tk.W, padx=6, pady=6)
+        startup_combo = ttk.Combobox(
+            tab_general,
+            textvariable=self.var_startup_mode,
+            values=[MODE_LABELS[m] for m in MODE_ORDER],
+            state="readonly",
+            width=16,
+        )
+        startup_combo.grid(row=row, column=1, sticky=tk.W, padx=6)
+        row += 1
+
+        ttk.Checkbutton(tab_general, text="Разрешить сборку EXE", variable=self.var_exe_build_enabled).grid(row=row, column=0, columnspan=2, sticky=tk.W, padx=6, pady=4)
+        row += 1
+
         ttk.Label(tab_general, text="Количество точек сэмплинга").grid(row=row, column=0, sticky=tk.W, padx=6, pady=6)
         ttk.Entry(tab_general, textvariable=self.var_sampling_points, width=12).grid(row=row, column=1, sticky=tk.W, padx=6)
         row += 1
 
         ttk.Label(tab_general, text="Интервал сэмплинга, сек").grid(row=row, column=0, sticky=tk.W, padx=6, pady=6)
         ttk.Entry(tab_general, textvariable=self.var_sampling_interval, width=12).grid(row=row, column=1, sticky=tk.W, padx=6)
+        row += 1
+
+        author = ttk.LabelFrame(tab_general, text="Об авторе")
+        author.grid(row=row, column=0, columnspan=2, sticky="ew", padx=6, pady=8)
+        ttk.Label(author, text="Евгений Поляков").pack(anchor=tk.W, padx=8, pady=(6, 2))
+        ttk.Label(author, text="@jounik53").pack(anchor=tk.W, padx=8, pady=(0, 6))
 
         ttk.Checkbutton(tab_modules, text="Сканировать процессы", variable=self.var_mod_process).pack(anchor=tk.W, padx=8, pady=6)
         ttk.Checkbutton(tab_modules, text="Сканировать автозагрузку", variable=self.var_mod_startup).pack(anchor=tk.W, padx=8, pady=6)
@@ -1230,6 +1275,8 @@ class MainWindow:
             cpu_limit_percent=cpu_limit,
             heuristics_enabled=bool(self.var_heuristics_enabled.get()),
             heuristic_rules={k: bool(v.get()) for k, v in getattr(self, "heuristic_vars", {}).items()},
+            startup_mode=self._normalize_mode(self._mode_id_from_label(self.var_startup_mode.get())),
+            exe_build_enabled=bool(self.var_exe_build_enabled.get()),
         )
 
     def save_settings(self) -> None:
@@ -1237,7 +1284,10 @@ class MainWindow:
         self._settings_service.save(settings)
         self._settings = settings
         self._apply_theme(settings.ui_theme)
-        self.status_var.set("Настройки сохранены")
+        if settings.startup_mode != self._mode:
+            self.status_var.set(f"Настройки сохранены. Режим запуска: {MODE_LABELS.get(settings.startup_mode, 'Общий')}")
+        else:
+            self.status_var.set("Настройки сохранены")
         self._emit_event(EventLevel.INFO, "Информация", "Настройки сохранены")
 
     def scan(self) -> None:
@@ -1916,6 +1966,8 @@ class MainWindow:
             self.log_text.insert(tk.END, f"[{report}]\n{self._log_analyzer.summarize_report(payload)}\n")
 
     def _sync_module_info(self) -> None:
+        if not hasattr(self, "module_list"):
+            return
         self.module_list.delete(0, tk.END)
         for module_id, schema in self._module_registry.schema_map().items():
             self.module_list.insert(tk.END, f"{module_id}: {schema['module_name']} defaults={schema['defaults']}")
@@ -2022,7 +2074,7 @@ class MainWindow:
     def action_search_overview_online(self) -> None:
         payload = self._selected_overview_payload()
         if payload is None:
-            self.status_var.set("Выберите запись в обзоре")
+            self.status_var.set("Выберите запись в сканировании")
             return
         query = str(payload.get("display_path") or payload.get("kind") or "").strip()
         self._search_online(query)
@@ -2052,6 +2104,7 @@ class MainWindow:
             self.status_var.set(result.message + " | Текущий запуск без прав администратора")
         if result.ok:
             self._emit_event(EventLevel.INFO, "Информация", result.message)
+            self._emit_event(EventLevel.INFO, "Rollback", f"Точка отката зафиксирована для действия: {result.message}")
             messagebox.showinfo("Действие", result.message)
         else:
             self._emit_event(EventLevel.ERROR, "Ошибка", result.message)
@@ -2080,7 +2133,7 @@ class MainWindow:
     def action_open_overview_path(self) -> None:
         path = self._selected_overview_path()
         if not path:
-            self.status_var.set("Выберите запись в таблице обзора")
+            self.status_var.set("Выберите запись в таблице сканирования")
             return
         self._show_action_result(self._action_service.open_in_explorer(path))
 
@@ -2090,7 +2143,7 @@ class MainWindow:
             return
 
         win = tk.Toplevel(self.root)
-        win.title("Детали записи обзора")
+        win.title("Детали записи сканирования")
         win.geometry("920x540")
         win.transient(self.root)
         try:
@@ -2195,6 +2248,8 @@ class MainWindow:
             self._show_action_result(type("Result", (), {"ok": False, "message": f"Ошибка VirusTotal: {exc}"})())
 
     def action_refresh_processes(self, silent: bool = False) -> None:
+        if self._warmup_is_running("Обновление процессов"):
+            return
         try:
             settings = self._collect_settings()
             records = self._scan_service.scan_processes_only(settings.process_high_mb, settings.process_medium_mb)
@@ -2223,6 +2278,8 @@ class MainWindow:
                 self.action_refresh_startup()
 
     def action_refresh_startup(self, silent: bool = False) -> None:
+        if self._warmup_is_running("Обновление автозагрузки"):
+            return
         try:
             entries = self._scan_service.scan_startup_only()
             snapshot = type(
@@ -2244,6 +2301,8 @@ class MainWindow:
             self._handle_error("Ошибка обновления автозагрузки", str(exc))
 
     def action_refresh_services(self, silent: bool = False) -> None:
+        if self._warmup_is_running("Обновление служб"):
+            return
         try:
             services = self._scan_service.scan_services_only()
             snapshot = type(
@@ -2265,6 +2324,8 @@ class MainWindow:
             self._handle_error("Ошибка обновления служб", str(exc))
 
     def action_refresh_drivers(self, silent: bool = False) -> None:
+        if self._warmup_is_running("Обновление драйверов"):
+            return
         try:
             drivers = self._scan_service.scan_drivers_only()
             snapshot = type(
@@ -2471,6 +2532,9 @@ class MainWindow:
         m.tk_popup(event.x_root, event.y_root)
 
     def build_exe(self) -> None:
+        if not self._settings.exe_build_enabled:
+            messagebox.showwarning("EXE", "Сборка EXE отключена в настройках")
+            return
         if self._build_busy:
             return
         self._build_busy = True
@@ -2488,6 +2552,10 @@ class MainWindow:
                 self._build_busy = False
                 if ok:
                     self._emit_event(EventLevel.INFO, "Информация", f"Сборка EXE завершена: {msg}")
+                    build_path = Path(__file__).resolve().parents[2] / msg
+                    folder = build_path.parent if build_path.suffix else build_path
+                    if folder.exists():
+                        self._action_service.open_in_explorer(str(folder))
                     messagebox.showinfo("EXE", f"Сборка EXE завершена: {msg}")
                 else:
                     self._emit_event(EventLevel.ERROR, "Ошибка", msg)
