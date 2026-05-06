@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.application.services.scan_service import ScanService
-from app.domain.entities import MemoryLevel, ProcessRecord, ScanSnapshot, ServiceRecord, StartupEntry, VirusTotalResult
+from app.domain.entities import DriverRecord, MemoryLevel, ProcessRecord, ScanSnapshot, ServiceRecord, StartupEntry, VirusTotalResult
 
 
 class DummyProcessScanner:
@@ -64,11 +64,30 @@ class DummyReportRepo:
         return {"path": path}
 
 
+class DummyDriverScanner:
+    def estimate_driver_count(self):
+        return 1
+
+    def scan_drivers(self):
+        return [
+            DriverRecord(
+                name="drv",
+                display_name="Driver",
+                state="running",
+                start_mode="auto",
+                executable_path="C:\\Windows\\System32\\drivers\\drv.sys",
+                risk_score=10,
+                resource_score=5,
+            )
+        ]
+
+
 def test_full_scan_attaches_vt_and_report_path():
     service = ScanService(
         process_scanner=DummyProcessScanner(),
         startup_scanner=DummyStartupScanner(),
         service_scanner=DummyServiceScanner(),
+        driver_scanner=DummyDriverScanner(),
         vt=DummyVt(),
         reports=DummyReportRepo(),
     )
@@ -86,6 +105,7 @@ def test_full_scan_can_disable_modules():
         process_scanner=DummyProcessScanner(),
         startup_scanner=DummyStartupScanner(),
         service_scanner=DummyServiceScanner(),
+        driver_scanner=DummyDriverScanner(),
         vt=DummyVt(),
         reports=DummyReportRepo(),
     )
@@ -97,8 +117,10 @@ def test_full_scan_can_disable_modules():
         enable_process_module=False,
         enable_startup_module=True,
         enable_services_module=False,
+        enable_driver_module=False,
     )
 
     assert snapshot.process_records == []
     assert len(snapshot.startup_entries) == 1
     assert snapshot.service_records == []
+    assert snapshot.driver_records == []

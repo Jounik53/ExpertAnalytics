@@ -7,6 +7,7 @@ import threading
 import ctypes
 import time
 import webbrowser
+import hashlib
 from ctypes import wintypes
 import tkinter as tk
 from urllib.parse import quote_plus
@@ -24,7 +25,7 @@ from app.application.services.log_analyzer_service import LogAnalyzerService
 from app.application.services.report_insight_service import ReportInsightService
 from app.application.services.scan_service import ScanService
 from app.application.services.settings_service import AppSettings, SettingsService
-from app.domain.entities import ProcessRecord, ServiceRecord, StartupEntry
+from app.domain.entities import ProcessRecord, ServiceRecord, StartupEntry, DriverRecord
 from app.domain.ports import ReportRepositoryPort
 from app.ui.event_store import UIEventStore
 from app.ui.i18n import I18n
@@ -104,11 +105,13 @@ class MainWindow:
         self._row_index: dict[str, ProcessRecord] = {}
         self._startup_index: dict[str, StartupEntry] = {}
         self._service_index: dict[str, ServiceRecord] = {}
+        self._driver_index: dict[str, DriverRecord] = {}
         self._overview_index: dict[str, tuple[str, object]] = {}
         self._report_paths: dict[str, str] = {}
         self._all_processes: list[ProcessRecord] = []
         self._all_startup: list[StartupEntry] = []
         self._all_services: list[ServiceRecord] = []
+        self._all_drivers: list[DriverRecord] = []
         self._folder_index: dict[str, ProcessRecord] = {}
         self._folder_origin: dict[str, str] = {}
         self._live_report_lines: list[str] = []
@@ -280,6 +283,7 @@ class MainWindow:
         self.var_mod_process = tk.BooleanVar(value=self._settings.enable_process_module)
         self.var_mod_startup = tk.BooleanVar(value=self._settings.enable_startup_module)
         self.var_mod_services = tk.BooleanVar(value=self._settings.enable_services_module)
+        self.var_mod_drivers = tk.BooleanVar(value=self._settings.enable_driver_module)
         self.var_sampling_enabled = tk.BooleanVar(value=self._settings.sampling_enabled)
         self.var_sampling_points = tk.IntVar(value=self._settings.sampling_points)
         self.var_sampling_interval = tk.IntVar(value=self._settings.sampling_interval_sec)
@@ -311,6 +315,7 @@ class MainWindow:
         self.frame_processes = ttk.Frame(self.notebook)
         self.frame_startup = ttk.Frame(self.notebook)
         self.frame_services = ttk.Frame(self.notebook)
+        self.frame_drivers = ttk.Frame(self.notebook)
         self.frame_reports = ttk.Frame(self.notebook)
         self.frame_logs = ttk.Frame(self.notebook)
         self.frame_folder_processes = ttk.Frame(self.notebook)
@@ -323,6 +328,7 @@ class MainWindow:
         self.notebook.add(self.frame_processes, text="Процессы")
         self.notebook.add(self.frame_startup, text="Автозагрузка")
         self.notebook.add(self.frame_services, text="Службы")
+        self.notebook.add(self.frame_drivers, text="Драйверы")
         self.notebook.add(self.frame_reports, text="Отчеты")
         self.notebook.add(self.frame_logs, text="Анализ логов")
         self.notebook.add(self.frame_folder_processes, text="Процессы в папках")
@@ -335,6 +341,7 @@ class MainWindow:
         self._build_processes_tab()
         self._build_startup_tab()
         self._build_services_tab()
+        self._build_drivers_tab()
         self._build_reports_tab()
         self._build_logs_tab()
         self._build_folder_processes_tab()
@@ -641,16 +648,19 @@ class MainWindow:
             processes = self._scan_service.scan_processes_only(high_mb, medium_mb)
             services = self._scan_service.scan_services_only()
             startup = self._scan_service.scan_startup_only()
+            drivers = self._scan_service.scan_drivers_only()
 
             def _apply() -> None:
                 self._all_processes = list(processes)
                 self._all_services = list(services)
                 self._all_startup = list(startup)
+                self._all_drivers = list(drivers)
 
-                proc_snapshot = type("Snapshot", (), {"process_records": self._all_processes, "service_records": self._all_services, "startup_entries": self._all_startup})
+                proc_snapshot = type("Snapshot", (), {"process_records": self._all_processes, "service_records": self._all_services, "startup_entries": self._all_startup, "driver_records": self._all_drivers})
                 self._apply_process_filters()
                 self._fill_services(proc_snapshot)
                 self._fill_startup(proc_snapshot)
+                self._fill_drivers(proc_snapshot)
 
             self.root.after(0, _apply)
         except Exception as exc:
@@ -944,7 +954,7 @@ class MainWindow:
     def _build_services_tab(self) -> None:
         self.service_tree = ttk.Treeview(
             self.frame_services,
-            columns=("name", "status", "start", "pid", "memory", "risk", "reason", "path"),
+            columns=("name", "status", "start", "pid", "memory", "trust", "risk", "reason", "path"),
             show="headings",
         )
         headers = {
@@ -953,6 +963,7 @@ class MainWindow:
             "start": "Запуск",
             "pid": "PID",
             "memory": "Память",
+            "trust": "Доверие",
             "risk": "Риск",
             "reason": "Причина",
             "path": "Путь",
@@ -963,9 +974,10 @@ class MainWindow:
             "start": 100,
             "pid": 80,
             "memory": 110,
+            "trust": 110,
             "risk": 70,
-            "reason": 280,
-            "path": 600,
+            "reason": 320,
+            "path": 520,
         }
         for c in headers:
             self.service_tree.heading(c, text=headers[c])
@@ -987,6 +999,43 @@ class MainWindow:
         ttk.Button(b, text="Остановить службу", command=self.action_stop_service).pack(side=tk.LEFT, padx=4)
         ttk.Button(b, text="Отключить службу", command=self.action_disable_service).pack(side=tk.LEFT, padx=4)
         ttk.Button(b, text="Открыть в Проводнике", command=self.action_open_service_path).pack(side=tk.LEFT, padx=4)
+
+    def _build_drivers_tab(self) -> None:
+        self.driver_tree = ttk.Treeview(
+            self.frame_drivers,
+            columns=("name", "state", "start", "size", "risk", "resource", "path"),
+            show="headings",
+        )
+        headers = {
+            "name": "Имя",
+            "state": "Статус",
+            "start": "Запуск",
+            "size": "Размер",
+            "risk": "Риск",
+            "resource": "Нагрузка",
+            "path": "Путь",
+        }
+        widths = {
+            "name": 220,
+            "state": 110,
+            "start": 110,
+            "size": 100,
+            "risk": 90,
+            "resource": 100,
+            "path": 720,
+        }
+        for c in headers:
+            self.driver_tree.heading(c, text=headers[c])
+            self.driver_tree.column(c, width=widths[c], anchor=tk.W)
+        self._enable_tree_sorting(self.driver_tree, list(headers.keys()))
+        self.driver_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self._attach_scrollbars(self.driver_tree)
+        self.driver_tree.bind("<Button-3>", self._open_driver_menu)
+
+        b = ttk.Frame(self.frame_drivers)
+        b.pack(fill=tk.X, padx=10, pady=(0, 8))
+        ttk.Button(b, text="Обновить", command=self.action_refresh_drivers).pack(side=tk.LEFT, padx=4)
+        ttk.Button(b, text="Открыть в Проводнике", command=self.action_open_driver_path).pack(side=tk.LEFT, padx=4)
 
     def _build_reports_tab(self) -> None:
         self.report_tree = ttk.Treeview(self.frame_reports, columns=("created", "path"), show="headings")
@@ -1112,6 +1161,7 @@ class MainWindow:
         ttk.Checkbutton(tab_modules, text="Сканировать процессы", variable=self.var_mod_process).pack(anchor=tk.W, padx=8, pady=6)
         ttk.Checkbutton(tab_modules, text="Сканировать автозагрузку", variable=self.var_mod_startup).pack(anchor=tk.W, padx=8, pady=6)
         ttk.Checkbutton(tab_modules, text="Сканировать службы", variable=self.var_mod_services).pack(anchor=tk.W, padx=8, pady=6)
+        ttk.Checkbutton(tab_modules, text="Сканировать драйверы", variable=self.var_mod_drivers).pack(anchor=tk.W, padx=8, pady=6)
 
         self.heuristic_vars: dict[str, tk.BooleanVar] = {}
         ttk.Checkbutton(tab_heur, text="Включить эвристику", variable=self.var_heuristics_enabled).pack(anchor=tk.W, padx=8, pady=6)
@@ -1170,6 +1220,7 @@ class MainWindow:
             enable_process_module=bool(self.var_mod_process.get()),
             enable_startup_module=bool(self.var_mod_startup.get()),
             enable_services_module=bool(self.var_mod_services.get()),
+            enable_driver_module=bool(self.var_mod_drivers.get()),
             sampling_enabled=bool(self.var_sampling_enabled.get()),
             sampling_points=int(self.var_sampling_points.get() or 5),
             sampling_interval_sec=int(self.var_sampling_interval.get() or 3),
@@ -1218,6 +1269,7 @@ class MainWindow:
                     enable_process_module=settings.enable_process_module,
                     enable_startup_module=settings.enable_startup_module,
                     enable_services_module=settings.enable_services_module,
+                    enable_driver_module=settings.enable_driver_module,
                     sampling_points=settings.sampling_points if settings.sampling_enabled else 0,
                     sampling_interval_sec=settings.sampling_interval_sec,
                     max_workers=workers,
@@ -1298,10 +1350,12 @@ class MainWindow:
         self._all_processes = list(snapshot.process_records)
         self._all_startup = list(snapshot.startup_entries)
         self._all_services = list(snapshot.service_records)
+        self._all_drivers = list(getattr(snapshot, "driver_records", []) or [])
 
         self._apply_process_filters()
         self._fill_startup(snapshot)
         self._fill_services(snapshot)
+        self._fill_drivers(snapshot)
         self._fill_overview(snapshot)
 
         self._fill_diagnostics(snapshot)
@@ -1474,13 +1528,65 @@ class MainWindow:
                 start_map.get(str(rec.start_type).lower(), rec.start_type),
                 rec.pid or "-",
                 f"{mem:.1f} МБ" if mem is not None else "-",
+                "trusted" if rec.trusted else "untrusted",
                 rec.risk_score,
-                rec.risk_reason,
+                (f"trusted: {rec.trust_reason}" if rec.trusted else rec.risk_reason),
                 rec.executable_path,
             )
-            iid = self.service_tree.insert("", tk.END, values=vals)
+            tag = "mem_green" if rec.trusted else ("mem_red" if rec.risk_score >= 60 else "mem_yellow" if rec.risk_score >= 30 else "mem_white")
+            iid = self.service_tree.insert("", tk.END, values=vals, tags=(tag,))
             self._service_index[iid] = rec
         self._restore_tree_sort(self.service_tree)
+
+    @staticmethod
+    def _service_exe_sha(path: str) -> str:
+        p = Path(path)
+        if not p.exists() or not p.is_file():
+            return ""
+        h = hashlib.sha256()
+        try:
+            with p.open("rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        except OSError:
+            return ""
+
+    @staticmethod
+    def _service_exe_sha(path: str) -> str:
+        p = Path(path)
+        if not p.exists() or not p.is_file():
+            return ""
+        h = hashlib.sha256()
+        try:
+            with p.open("rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        except OSError:
+            return ""
+
+    def _fill_drivers(self, snapshot) -> None:
+        self._all_drivers = list(getattr(snapshot, "driver_records", []) or [])
+        self._refresh_drivers_view()
+
+    def _refresh_drivers_view(self) -> None:
+        self.driver_tree.delete(*self.driver_tree.get_children())
+        self._driver_index = {}
+        for rec in self._all_drivers:
+            vals = (
+                rec.name,
+                rec.state,
+                rec.start_mode,
+                f"{rec.image_size_mb:.2f} МБ" if rec.image_size_mb > 0 else "-",
+                rec.risk_score,
+                rec.resource_score,
+                rec.executable_path,
+            )
+            tag = "mem_red" if rec.risk_score >= 60 or rec.resource_score >= 70 else "mem_yellow" if rec.risk_score >= 30 or rec.resource_score >= 40 else "mem_white"
+            iid = self.driver_tree.insert("", tk.END, values=vals, tags=(tag,))
+            self._driver_index[iid] = rec
+        self._restore_tree_sort(self.driver_tree)
 
     def _fill_overview(self, snapshot) -> None:
         self.overview_tree.delete(*self.overview_tree.get_children())
@@ -1592,6 +1698,9 @@ class MainWindow:
             ]
             if svc_risk:
                 detail_chunks.append(f"Риск служб: {max(s.risk_score for s in svc_risk)}")
+            trusted_svcs = [s for s in svcs if getattr(s, "trusted", False)]
+            if trusted_svcs:
+                detail_chunks.append(f"Trusted служб: {len(trusted_svcs)}")
 
             vals = (
                 str(item["display_path"]),
@@ -1673,6 +1782,17 @@ class MainWindow:
                 lines.append(f"- {s.name} | {state} | {s.location}")
         else:
             lines.append("- Не обнаружена")
+
+        lines.append("")
+        lines.append("Драйверы (риск/нагрузка):")
+        drivers = list(getattr(snapshot, "driver_records", []) or [])
+        if drivers:
+            for d in drivers[:100]:
+                lines.append(
+                    f"- {d.name} | риск {d.risk_score} | нагрузка {d.resource_score} | запуск {d.start_mode} | путь: {d.executable_path or '-'}"
+                )
+        else:
+            lines.append("- Не обнаружены")
 
         current = self._report_text()
         summary = "\n".join(lines)
@@ -1836,6 +1956,12 @@ class MainWindow:
                 return data[1]  # type: ignore[return-value]
         return None
 
+    def _selected_driver(self) -> DriverRecord | None:
+        selection = self.driver_tree.selection()
+        if not selection:
+            return None
+        return self._driver_index.get(selection[0])
+
     def _selected_overview_path(self) -> str:
         selection = self.overview_tree.selection()
         if not selection:
@@ -1881,6 +2007,14 @@ class MainWindow:
         rec = self._selected_service()
         if rec is None:
             self.status_var.set("Выберите службу")
+            return
+        query = rec.name or rec.display_name or rec.executable_path
+        self._search_online(query)
+
+    def action_search_driver_online(self) -> None:
+        rec = self._selected_driver()
+        if rec is None:
+            self.status_var.set("Выберите драйвер")
             return
         query = rec.name or rec.display_name or rec.executable_path
         self._search_online(query)
@@ -2098,6 +2232,7 @@ class MainWindow:
                     "startup_entries": entries,
                     "process_records": self._all_processes,
                     "service_records": self._all_services,
+                    "driver_records": self._all_drivers,
                 },
             )
             self._all_startup = list(entries)
@@ -2118,6 +2253,7 @@ class MainWindow:
                     "process_records": self._all_processes,
                     "service_records": services,
                     "startup_entries": self._all_startup,
+                    "driver_records": self._all_drivers,
                 },
             )
             self._all_services = list(services)
@@ -2127,6 +2263,27 @@ class MainWindow:
                 self._emit_event(EventLevel.INFO, "Информация", "Список служб обновлен")
         except Exception as exc:
             self._handle_error("Ошибка обновления служб", str(exc))
+
+    def action_refresh_drivers(self, silent: bool = False) -> None:
+        try:
+            drivers = self._scan_service.scan_drivers_only()
+            snapshot = type(
+                "Snapshot",
+                (),
+                {
+                    "driver_records": drivers,
+                    "process_records": self._all_processes,
+                    "service_records": self._all_services,
+                    "startup_entries": self._all_startup,
+                },
+            )
+            self._all_drivers = list(drivers)
+            self._fill_drivers(snapshot)
+            if not silent:
+                self.status_var.set("Список драйверов обновлен")
+                self._emit_event(EventLevel.INFO, "Информация", "Список драйверов обновлен")
+        except Exception as exc:
+            self._handle_error("Ошибка обновления драйверов", str(exc))
 
     def action_open_startup_path(self) -> None:
         rec = self._selected_startup()
@@ -2162,8 +2319,53 @@ class MainWindow:
 
     def action_open_service_path(self) -> None:
         rec = self._selected_service()
+        if rec is None:
+            return
+        path = rec.executable_path
+        if not path and rec.name:
+            path = self._resolve_service_executable(rec.name)
+            if path:
+                rec.executable_path = path
+        if path:
+            self._show_action_result(self._action_service.open_in_explorer(path))
+            return
+        self.status_var.set("Путь службы не найден")
+
+    def action_open_driver_path(self) -> None:
+        rec = self._selected_driver()
         if rec and rec.executable_path:
             self._show_action_result(self._action_service.open_in_explorer(rec.executable_path))
+
+    def _resolve_service_executable(self, service_name: str) -> str:
+        script = (
+            "$name=$args[0];"
+            "$svc = Get-CimInstance Win32_Service -Filter \"Name='$name'\" -ErrorAction SilentlyContinue;"
+            "if ($svc) { [string]$svc.PathName }"
+        )
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script, service_name],
+                capture_output=True,
+                text=True,
+                shell=False,
+                timeout=3500,
+            )
+        except Exception:
+            return ""
+        if proc.returncode != 0:
+            return ""
+        raw = (proc.stdout or "").strip()
+        if not raw:
+            return ""
+        if raw.startswith('"'):
+            end = raw.find('"', 1)
+            if end > 1:
+                raw = raw[1:end]
+        else:
+            raw = raw.split(" ")[0]
+        if raw.startswith(r"\SystemRoot\\"):
+            raw = raw.replace(r"\SystemRoot", r"C:\Windows", 1)
+        return raw
 
     def pick_folder_path(self) -> None:
         path = filedialog.askdirectory(title="Выберите папку для поиска процессов")
@@ -2346,6 +2548,15 @@ class MainWindow:
         m.add_separator()
         m.add_command(label="Искать в интернете", command=self.action_search_service_online)
         m.add_command(label="Копировать запись", command=lambda: self._copy_tree_row(self.service_tree))
+        m.tk_popup(event.x_root, event.y_root)
+
+    def _open_driver_menu(self, event) -> None:
+        self._menu_target(event, self.driver_tree)
+        m = tk.Menu(self.root, tearoff=0)
+        m.add_command(label="Открыть в Проводнике", command=self.action_open_driver_path)
+        m.add_separator()
+        m.add_command(label="Искать в интернете", command=self.action_search_driver_online)
+        m.add_command(label="Копировать запись", command=lambda: self._copy_tree_row(self.driver_tree))
         m.tk_popup(event.x_root, event.y_root)
 
     def _open_overview_menu(self, event) -> None:

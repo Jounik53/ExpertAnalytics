@@ -1,0 +1,44 @@
+{
+  "services": [
+    {
+      "names": ["wuauserv"],
+      "display_names": ["windows update"],
+      "paths": [
+        "c:\\windows\\system32\\svchost.exe"
+      ],
+      "sha256": []
+    },
+    {
+      "names": ["eventlog"],
+      "display_names": ["windows event log"],
+      "paths": [
+        "c:\\windows\\system32\\svchost.exe"
+      ],
+      "sha256": []
+    },
+    {
+      "names": ["lanmanworkstation"],
+      "display_names": ["workstation"],
+      "paths": [
+        "c:\\windows\\system32\\svchost.exe"
+      ],
+      "sha256": []
+    },
+    {
+      "names": ["dnscache"],
+      "display_names": ["dns client"],
+      "paths": [
+        "c:\\windows\\system32\\svchost.exe"
+      ],
+      "sha256": []
+    },
+    {
+      "names": ["schedule"],
+      "display_names": ["task scheduler"],
+      "paths": [
+        "c:\\windows\\system32\\svchost.exe"
+      ],
+      "sha256": []
+    }
+  ]
+}

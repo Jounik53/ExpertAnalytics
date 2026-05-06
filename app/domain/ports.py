@@ -10,6 +10,7 @@ from app.domain.entities import (
     SamplingPoint,
     ScanSnapshot,
     ServiceRecord,
+    DriverRecord,
     StartupEntry,
     VirusTotalResult,
 )
@@ -39,6 +40,14 @@ class ServiceScannerPort(Protocol):
         ...
 
     def estimate_service_count(self) -> int:
+        ...
+
+
+class DriverScannerPort(Protocol):
+    def scan_drivers(self, item_callback=None) -> list[DriverRecord]:
+        ...
+
+    def estimate_driver_count(self) -> int:
         ...
 
 

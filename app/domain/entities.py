@@ -61,8 +61,26 @@ class ServiceRecord:
     signer: str = "unknown"
     file_version: str = ""
     file_date: str = ""
+    file_sha256: str = ""
+    trusted: bool = False
+    trust_reason: str = ""
     risk_score: int = 0
     risk_reason: str = ""
+
+
+@dataclass(slots=True)
+class DriverRecord:
+    name: str
+    display_name: str
+    state: str
+    start_mode: str
+    executable_path: str
+    file_sha256: str = ""
+    image_size_mb: float = 0.0
+    risk_score: int = 0
+    risk_reason: str = ""
+    resource_score: int = 0
+    resource_reason: str = ""
 
 
 @dataclass(slots=True)
@@ -96,6 +114,7 @@ class ScanSnapshot:
     process_records: list[ProcessRecord] = field(default_factory=list)
     startup_entries: list[StartupEntry] = field(default_factory=list)
     service_records: list[ServiceRecord] = field(default_factory=list)
+    driver_records: list[DriverRecord] = field(default_factory=list)
     diagnostics: list[str] = field(default_factory=list)
     diagnostics_snapshot: DiagnosticsSnapshot | None = None
     sampling_points: list[SamplingPoint] = field(default_factory=list)

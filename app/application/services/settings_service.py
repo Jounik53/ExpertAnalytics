@@ -15,6 +15,7 @@ class AppSettings:
     enable_process_module: bool = True
     enable_startup_module: bool = True
     enable_services_module: bool = True
+    enable_driver_module: bool = True
     enable_vt_lookup: bool = False
     sampling_enabled: bool = False
     sampling_points: int = 5
@@ -45,6 +46,7 @@ class SettingsService:
             enable_process_module=bool(raw.get("enable_process_module", True)),
             enable_startup_module=bool(raw.get("enable_startup_module", True)),
             enable_services_module=bool(raw.get("enable_services_module", True)),
+            enable_driver_module=bool(raw.get("enable_driver_module", True)),
             enable_vt_lookup=bool(raw.get("enable_vt_lookup", False)),
             sampling_enabled=bool(raw.get("sampling_enabled", False)),
             sampling_points=int(raw.get("sampling_points", 5)),
@@ -66,6 +68,7 @@ class SettingsService:
                 "enable_process_module": settings.enable_process_module,
                 "enable_startup_module": settings.enable_startup_module,
                 "enable_services_module": settings.enable_services_module,
+                "enable_driver_module": settings.enable_driver_module,
                 "enable_vt_lookup": settings.enable_vt_lookup,
                 "sampling_enabled": settings.sampling_enabled,
                 "sampling_points": settings.sampling_points,

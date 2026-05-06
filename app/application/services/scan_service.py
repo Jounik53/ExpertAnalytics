@@ -14,6 +14,7 @@ from app.domain.ports import (
     ReportRepositoryPort,
     SamplerPort,
     ServiceScannerPort,
+    DriverScannerPort,
     StartupScannerPort,
     VirusTotalPort,
 )
@@ -28,6 +29,7 @@ class ScanService:
         process_scanner: ProcessScannerPort,
         startup_scanner: StartupScannerPort,
         service_scanner: ServiceScannerPort,
+        driver_scanner: DriverScannerPort | None,
         vt: VirusTotalPort,
         reports: ReportRepositoryPort,
         diagnostics: DiagnosticsPort | None = None,
@@ -36,6 +38,7 @@ class ScanService:
         self._process_scanner = process_scanner
         self._startup_scanner = startup_scanner
         self._service_scanner = service_scanner
+        self._driver_scanner = driver_scanner
         self._vt = vt
         self._reports = reports
         self._diagnostics = diagnostics
@@ -50,6 +53,7 @@ class ScanService:
         enable_process_module: bool = True,
         enable_startup_module: bool = True,
         enable_services_module: bool = True,
+        enable_driver_module: bool = True,
         sampling_points: int = 0,
         sampling_interval_sec: int = 3,
         max_workers: int = 4,
@@ -72,11 +76,12 @@ class ScanService:
         proc_estimate = self._safe_estimate(self._process_scanner, "estimate_process_count") if enable_process_module else 0
         startup_estimate = self._safe_estimate(self._startup_scanner, "estimate_startup_count") if enable_startup_module else 0
         service_estimate = self._safe_estimate(self._service_scanner, "estimate_service_count") if enable_services_module else 0
+        driver_estimate = self._safe_estimate(self._driver_scanner, "estimate_driver_count") if (enable_driver_module and self._driver_scanner is not None) else 0
         vt_estimate = proc_estimate if with_vt else 0
         heuristic_rules_count = sum(1 for _ in self._heuristics.rules) if heuristics_enabled and enable_process_module else 0
         heur_estimate = proc_estimate * heuristic_rules_count
 
-        total_units = max(10, 2 + proc_estimate + startup_estimate + service_estimate + vt_estimate + heur_estimate + 5)
+        total_units = max(10, 2 + proc_estimate + startup_estimate + service_estimate + driver_estimate + vt_estimate + heur_estimate + 5)
         current_units = 0
 
         def _step(message: str, units: int = 1) -> None:
@@ -88,12 +93,13 @@ class ScanService:
         process_records = []
         startup_entries = []
         service_records = []
+        driver_records = []
 
         if enable_process_module:
             pause_check()
             if cancel_check():
                 _emit_progress(total_units, total_units, "Сканирование остановлено")
-                return self._build_and_save_snapshot(total_ram=0.0, used_ram=0.0, process_records=[], startup_entries=[], service_records=[], sampling_points=[])
+                return self._build_and_save_snapshot(total_ram=0.0, used_ram=0.0, process_records=[], startup_entries=[], service_records=[], driver_records=[], sampling_points=[])
             try:
                 _step("Сканирование процессов", 1)
 
@@ -112,7 +118,7 @@ class ScanService:
             pause_check()
             if cancel_check():
                 _emit_progress(total_units, total_units, "Сканирование остановлено")
-                return self._build_and_save_snapshot(total_ram=0.0, used_ram=0.0, process_records=process_records, startup_entries=[], service_records=[], sampling_points=[])
+                return self._build_and_save_snapshot(total_ram=0.0, used_ram=0.0, process_records=process_records, startup_entries=[], service_records=[], driver_records=[], sampling_points=[])
             try:
                 _step("Сканирование автозагрузки", 1)
 
@@ -131,7 +137,7 @@ class ScanService:
             pause_check()
             if cancel_check():
                 _emit_progress(total_units, total_units, "Сканирование остановлено")
-                return self._build_and_save_snapshot(total_ram=0.0, used_ram=0.0, process_records=process_records, startup_entries=startup_entries, service_records=[], sampling_points=[])
+                return self._build_and_save_snapshot(total_ram=0.0, used_ram=0.0, process_records=process_records, startup_entries=startup_entries, service_records=[], driver_records=[], sampling_points=[])
             try:
                 _step("Сканирование служб", 1)
 
@@ -145,6 +151,33 @@ class ScanService:
                 service_records = self._scan_services_with_callback(_service_item)
             except Exception as exc:
                 logger.exception("Service scan failed: %s", exc)
+
+        if enable_driver_module and self._driver_scanner is not None:
+            pause_check()
+            if cancel_check():
+                _emit_progress(total_units, total_units, "Сканирование остановлено")
+                return self._build_and_save_snapshot(
+                    total_ram=0.0,
+                    used_ram=0.0,
+                    process_records=process_records,
+                    startup_entries=startup_entries,
+                    service_records=service_records,
+                    driver_records=[],
+                    sampling_points=[],
+                )
+            try:
+                _step("Сканирование драйверов", 1)
+
+                driver_progress = {"done": 0}
+
+                def _driver_item(message: str) -> None:
+                    driver_progress["done"] += 1
+                    _step(f"Сканирование драйверов ({driver_progress['done']})")
+                    _emit_report(message)
+
+                driver_records = self._scan_drivers_with_callback(_driver_item)
+            except Exception as exc:
+                logger.exception("Driver scan failed: %s", exc)
 
         total_ram, used_ram = self._process_scanner.memory_totals()
         _step("Анализ использования памяти", 2)
@@ -227,6 +260,7 @@ class ScanService:
             process_records=process_records,
             startup_entries=startup_entries,
             service_records=service_records,
+            driver_records=driver_records,
             diagnostics=self._build_diagnostics(total_ram, used_ram, process_records),
             diagnostics_snapshot=diag_snapshot,
             sampling_points=sample_points,
@@ -245,6 +279,9 @@ class ScanService:
 
     def scan_services_only(self) -> list:
         return self._scan_services_with_callback(None)
+
+    def scan_drivers_only(self) -> list:
+        return self._scan_drivers_with_callback(None)
 
     def lookup_sha256(self, sha256: str | None):
         if not sha256:
@@ -306,6 +343,20 @@ class ScanService:
                     )
             return records
 
+    def _scan_drivers_with_callback(self, callback):
+        if self._driver_scanner is None:
+            return []
+        try:
+            return self._driver_scanner.scan_drivers(item_callback=callback)
+        except TypeError:
+            records = self._driver_scanner.scan_drivers()
+            if callback is not None:
+                for rec in records:
+                    callback(
+                        f"Драйвер: {rec.name} | состояние: {rec.state} | запуск: {rec.start_mode} | риск: {rec.risk_score} | размер: {rec.image_size_mb:.2f} МБ | путь: {rec.executable_path or '-'}"
+                    )
+            return records
+
     @staticmethod
     def _vt_line(rec) -> str:
         vt = rec.vt_result
@@ -322,6 +373,7 @@ class ScanService:
         process_records,
         startup_entries,
         service_records,
+        driver_records,
         sampling_points,
     ) -> tuple[ScanSnapshot, str]:
         snapshot = ScanSnapshot(
@@ -331,6 +383,7 @@ class ScanService:
             process_records=process_records,
             startup_entries=startup_entries,
             service_records=service_records,
+            driver_records=driver_records,
             diagnostics=self._build_diagnostics(total_ram, used_ram, process_records),
             diagnostics_snapshot=None,
             sampling_points=sampling_points,

@@ -10,6 +10,7 @@ from app.adapters.modules.loader import build_default_registry
 from app.adapters.system.actions import WindowsSystemActions
 from app.adapters.system.process_scanner import PsutilProcessScanner
 from app.adapters.system.sampler import WindowsSampler
+from app.adapters.system.driver_scanner import WindowsDriverScanner
 from app.adapters.system.service_scanner import PsutilServiceScanner
 from app.adapters.system.startup_scanner import RegistryStartupScanner
 from app.adapters.system.diagnostics import WindowsDiagnosticsCollector
@@ -50,6 +51,7 @@ def build_app() -> MainWindow:
         process_scanner=PsutilProcessScanner(),
         startup_scanner=RegistryStartupScanner(),
         service_scanner=PsutilServiceScanner(),
+        driver_scanner=WindowsDriverScanner(),
         vt=vt_client,
         reports=report_repo,
         diagnostics=WindowsDiagnosticsCollector(),

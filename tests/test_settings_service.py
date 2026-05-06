@@ -18,6 +18,7 @@ def test_settings_save_and_load(tmp_path: Path):
     assert loaded.process_high_mb == 1000
     assert loaded.process_medium_mb == 400
     assert loaded.enable_vt_lookup is True
+    assert loaded.enable_driver_module is True
 
 
 def test_settings_theme_defaults_to_dark_and_normalizes(tmp_path: Path):

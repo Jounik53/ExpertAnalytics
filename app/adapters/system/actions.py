@@ -78,7 +78,11 @@ class WindowsSystemActions(SystemActionPort):
         result = subprocess.run(["sc", "stop", service_name], capture_output=True, text=True, shell=False)
         if result.returncode == 0:
             return ActionResult(ok=True, message=f"Служба {service_name} остановлена")
-        return ActionResult(ok=False, message=f"Ошибка sc stop: {result.stdout} {result.stderr}")
+        ps_cmd = f"Stop-Service -Name '{service_name}' -ErrorAction Stop"
+        ps = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, text=True, shell=False)
+        if ps.returncode == 0:
+            return ActionResult(ok=True, message=f"Служба {service_name} остановлена")
+        return ActionResult(ok=False, message=f"Ошибка остановки службы: {result.stdout} {result.stderr} {ps.stdout} {ps.stderr}")
 
     def disable_service(self, service_name: str) -> ActionResult:
         if self.dry_run:
@@ -91,7 +95,11 @@ class WindowsSystemActions(SystemActionPort):
         )
         if result.returncode == 0:
             return ActionResult(ok=True, message=f"Служба {service_name} отключена")
-        return ActionResult(ok=False, message=f"Ошибка sc config: {result.stdout} {result.stderr}")
+        ps_cmd = f"Set-Service -Name '{service_name}' -StartupType Disabled -ErrorAction Stop"
+        ps = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, text=True, shell=False)
+        if ps.returncode == 0:
+            return ActionResult(ok=True, message=f"Служба {service_name} отключена")
+        return ActionResult(ok=False, message=f"Ошибка отключения службы: {result.stdout} {result.stderr} {ps.stdout} {ps.stderr}")
 
     def uninstall_by_executable(self, executable_path: str) -> ActionResult:
         if self.dry_run:
