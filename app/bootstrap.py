@@ -16,6 +16,7 @@ from app.adapters.system.startup_scanner import RegistryStartupScanner
 from app.adapters.system.diagnostics import WindowsDiagnosticsCollector
 from app.adapters.vt.http_client import VirusTotalHttpClient
 from app.adapters.vt.noop_client import NoopVirusTotalClient
+from app.application.helpers.modes import normalize_mode
 from app.application.logging_setup import configure_logging
 from app.application.services.action_service import ActionService
 from app.application.services.scan_service import ScanService
@@ -25,13 +26,6 @@ from app.application.services.log_analyzer_service import LogAnalyzerService
 from app.ui.i18n import I18n
 from app.ui.event_store import UIEventStore
 from app.ui.main_window import MainWindow
-
-
-def _normalize_mode(value: str | None) -> str:
-    mode = str(value or "general").strip().lower()
-    allowed = {"general", "scanning", "processes", "startup", "services", "drivers", "heuristics"}
-    return mode if mode in allowed else "general"
-
 
 def build_app(mode: str | None = None) -> MainWindow:
     base_dir = Path(__file__).resolve().parent
@@ -67,7 +61,7 @@ def build_app(mode: str | None = None) -> MainWindow:
 
     effective_locale = settings.locale_code or os.getenv("DEFAULT_LOCALE", "ru")
 
-    effective_mode = _normalize_mode(mode or settings.startup_mode)
+    effective_mode = normalize_mode(mode or settings.startup_mode)
 
     return MainWindow(
         scan_service=scan_service,
@@ -92,4 +86,3 @@ def _load_env_file(path: Path) -> None:
             continue
         key, value = line.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip())
-    _load_env_file(base_dir.parent / ".env")

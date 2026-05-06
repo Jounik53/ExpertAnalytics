@@ -7,7 +7,6 @@ import subprocess
 import threading
 import time
 import webbrowser
-import hashlib
 import tkinter as tk
 from urllib.parse import quote_plus
 from collections import defaultdict
@@ -17,6 +16,7 @@ from tkinter import filedialog, messagebox, ttk
 import psutil
 
 from app.application.module_registry import ModuleRegistry
+from app.application.helpers.modes import MODE_LABELS, MODE_ORDER, mode_id_from_label, mode_label, normalize_mode
 from app.application.services.action_service import ActionService
 from app.application.services.exe_build_service import ExeBuildService
 from app.application.services.heuristics_service import HeuristicEngine
@@ -30,56 +30,14 @@ from app.ui.event_store import UIEventStore
 from app.ui.i18n import I18n
 from app.ui.language import Language
 from app.ui.notifications import EventLevel, UINotifier
+from app.ui.services.theme_service import ThemeService
 
 
 MAX_LIVE_REPORT_LINES = 1200
-MODE_LABELS = {
-    "general": "Общий",
-    "scanning": "Сканирование",
-    "processes": "Процессы",
-    "startup": "Автозагрузка",
-    "services": "Службы",
-    "drivers": "Драйверы",
-    "heuristics": "Эвристика",
-}
-MODE_ORDER = ["general", "scanning", "processes", "startup", "services", "drivers", "heuristics"]
-MODE_LABEL_TO_ID = {v: k for k, v in MODE_LABELS.items()}
 APP_VERSION = os.getenv("EXPERT_ANALYTICS_VERSION", "0.1.0")
 
 
 class MainWindow:
-    _THEME_DARK = {
-        "bg": "#1b1f24",
-        "panel": "#242a31",
-        "panel_alt": "#2c3440",
-        "text": "#e9edf2",
-        "muted_text": "#b7c0cc",
-        "accent": "#3f7fd6",
-        "border": "#3a4452",
-        "input_bg": "#1f252d",
-        "select_bg": "#2d5f9e",
-        "select_fg": "#ffffff",
-        "danger": "#7e3434",
-        "warn": "#85722b",
-        "ok": "#2f6245",
-    }
-
-    _THEME_LIGHT = {
-        "bg": "#f1f4f8",
-        "panel": "#ffffff",
-        "panel_alt": "#e9eef5",
-        "text": "#1f2933",
-        "muted_text": "#4b5a6a",
-        "accent": "#2d6cca",
-        "border": "#c9d3e0",
-        "input_bg": "#ffffff",
-        "select_bg": "#2d6cca",
-        "select_fg": "#ffffff",
-        "danger": "#ffd7d7",
-        "warn": "#fff5c6",
-        "ok": "#e9f7e9",
-    }
-
     def __init__(
         self,
         scan_service: ScanService,
@@ -102,7 +60,8 @@ class MainWindow:
         self._insight = report_insight_service
         self._log_analyzer = log_analyzer_service
         self._event_store = event_store
-        self._mode = self._normalize_mode(mode)
+        self._mode = normalize_mode(mode)
+        self._theme_service = ThemeService()
 
         self._settings = self._settings_service.load()
         self._exe_builder = ExeBuildService()
@@ -161,21 +120,8 @@ class MainWindow:
         y = 0
         self.root.geometry(f"{w}x{h}+{x}+{y}")
 
-    @staticmethod
-    def _normalize_mode(mode: str | None) -> str:
-        value = str(mode or "general").strip().lower()
-        return value if value in MODE_LABELS else "general"
-
     def set_mode_switch_callback(self, callback) -> None:
         self._switch_mode_callback = callback
-
-    @staticmethod
-    def _mode_label(mode: str | None) -> str:
-        return MODE_LABELS.get(str(mode or "").strip().lower(), MODE_LABELS["general"])
-
-    @staticmethod
-    def _mode_id_from_label(label: str | None) -> str:
-        return MODE_LABEL_TO_ID.get(str(label or "").strip(), "general")
 
     def _build_style(self) -> None:
         style = ttk.Style()
@@ -183,85 +129,26 @@ class MainWindow:
         style.configure("Header.TLabel", font=("Segoe UI", 10, "bold"))
         self._apply_theme(self._settings.ui_theme)
 
-    @staticmethod
-    def _normalize_theme(theme: str | None) -> str:
-        value = (theme or "dark").strip().lower()
-        return "light" if value == "light" else "dark"
-
     def _theme_colors(self) -> dict[str, str]:
-        return self._THEME_LIGHT if self._normalize_theme(getattr(self, "_current_theme", "dark")) == "light" else self._THEME_DARK
+        return self._theme_service.colors(getattr(self, "_current_theme", "dark"))
 
     def _apply_theme(self, theme: str) -> None:
-        self._current_theme = self._normalize_theme(theme)
-        c = self._theme_colors()
-        style = ttk.Style()
-
-        self.root.configure(background=c["bg"])
-
-        style.configure(".",
-                        background=c["bg"],
-                        foreground=c["text"],
-                        fieldbackground=c["input_bg"],
-                        bordercolor=c["border"],
-                        lightcolor=c["border"],
-                        darkcolor=c["border"],
-                        troughcolor=c["panel_alt"])
-        style.configure("TFrame", background=c["bg"])
-        style.configure("TNotebook", background=c["bg"], bordercolor=c["border"])
-        style.configure("TNotebook.Tab", background=c["panel_alt"], foreground=c["text"], padding=(10, 6))
-        style.map("TNotebook.Tab", background=[("selected", c["panel"])], foreground=[("selected", c["text"]), ("!selected", c["muted_text"])])
-
-        style.configure("TLabel", background=c["bg"], foreground=c["text"])
-        style.configure("Statusbar.TFrame", background=c["panel_alt"], bordercolor=c["border"])
-        style.configure("Status.TLabel", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"])
-        style.configure("Header.TLabel", background=c["bg"], foreground=c["text"], font=("Segoe UI", 10, "bold"))
-        style.configure("TLabelframe", background=c["bg"], foreground=c["text"], bordercolor=c["border"])
-        style.configure("TLabelframe.Label", background=c["bg"], foreground=c["text"])
-
-        style.configure("TButton", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"], focusthickness=1, focuscolor=c["accent"])
-        style.map("TButton",
-                  background=[("active", c["panel"]), ("pressed", c["panel"])],
-                  foreground=[("disabled", c["muted_text"]), ("!disabled", c["text"])])
-        style.configure("TEntry", fieldbackground=c["input_bg"], foreground=c["text"], bordercolor=c["border"], insertcolor=c["text"])
-        style.configure("TCombobox", fieldbackground=c["input_bg"], background=c["input_bg"], foreground=c["text"], arrowcolor=c["text"], bordercolor=c["border"])
-        style.map("TCombobox",
-                  fieldbackground=[("readonly", c["input_bg"])],
-                  foreground=[("readonly", c["text"])],
-                  selectbackground=[("readonly", c["select_bg"])],
-                  selectforeground=[("readonly", c["select_fg"])])
-
-        style.configure("TCheckbutton", background=c["bg"], foreground=c["text"])
-        style.map("TCheckbutton", foreground=[("disabled", c["muted_text"]), ("!disabled", c["text"])])
-
-        style.configure("TProgressbar", background=c["accent"], troughcolor=c["panel_alt"], bordercolor=c["border"], lightcolor=c["accent"], darkcolor=c["accent"])
-
-        style.configure("Treeview", background=c["panel"], fieldbackground=c["panel"], foreground=c["text"], bordercolor=c["border"], rowheight=22)
-        style.configure("Treeview.Heading", background=c["panel_alt"], foreground=c["text"], bordercolor=c["border"])
-        style.map("Treeview", background=[("selected", c["select_bg"])], foreground=[("selected", c["select_fg"])])
-        style.map("Treeview.Heading", background=[("active", c["panel"])], foreground=[("active", c["text"])])
-
-        style.configure("Vertical.TScrollbar", background=c["panel_alt"], troughcolor=c["panel"], bordercolor=c["border"], arrowcolor=c["text"])
-        style.configure("Horizontal.TScrollbar", background=c["panel_alt"], troughcolor=c["panel"], bordercolor=c["border"], arrowcolor=c["text"])
-
-        for text_widget_name in [
-            "overview_text",
-            "process_details",
-            "report_details",
-            "log_text",
-            "diag_text",
-        ]:
-            widget = getattr(self, text_widget_name, None)
-            if widget is not None:
-                try:
-                    widget.configure(background=c["panel"], foreground=c["text"], insertbackground=c["text"], selectbackground=c["select_bg"], selectforeground=c["select_fg"], highlightbackground=c["border"], highlightcolor=c["accent"])
-                except tk.TclError:
-                    pass
-
-        if hasattr(self, "module_list"):
-            try:
-                self.module_list.configure(background=c["panel"], foreground=c["text"], selectbackground=c["select_bg"], selectforeground=c["select_fg"], highlightbackground=c["border"], highlightcolor=c["accent"])
-            except tk.TclError:
-                pass
+        self._current_theme = self._theme_service.apply(
+            self.root,
+            theme,
+            widgets={
+                "overview_text": getattr(self, "overview_text", None),
+                "process_details": getattr(self, "process_details", None),
+                "report_details": getattr(self, "report_details", None),
+                "log_text": getattr(self, "log_text", None),
+                "diag_text": getattr(self, "diag_text", None),
+                "module_list": getattr(self, "module_list", None),
+                "status_label": getattr(self, "status_label", None),
+                "status_metrics": getattr(self, "status_metrics", None),
+                "metric_ram": getattr(self, "metric_ram", None),
+                "metric_cpu": getattr(self, "metric_cpu", None),
+            },
+        )
 
         for tree_name in [
             "overview_tree",
@@ -277,24 +164,7 @@ class MainWindow:
             if tree is not None:
                 self._configure_memory_tags(tree)
 
-        if hasattr(self, "status_label"):
-            try:
-                self.status_label.configure(style="Status.TLabel")
-            except tk.TclError:
-                pass
-
         if hasattr(self, "status_metrics"):
-            try:
-                self.status_metrics.configure(style="Statusbar.TFrame")
-            except tk.TclError:
-                pass
-            for lbl_name in ["metric_ram", "metric_cpu"]:
-                lbl = getattr(self, lbl_name, None)
-                if lbl is not None:
-                    try:
-                        lbl.configure(bg=c["panel_alt"], highlightbackground=c["border"], highlightcolor=c["border"])
-                    except tk.TclError:
-                        pass
             try:
                 self._refresh_system_metrics()
             except Exception:
@@ -317,10 +187,11 @@ class MainWindow:
         self.var_sampling_interval = tk.IntVar(value=self._settings.sampling_interval_sec)
         self.var_dry_run = tk.BooleanVar(value=self._settings.dry_run_actions)
         self.var_locale = tk.StringVar(value=self._settings.locale_code)
-        self.var_theme = tk.StringVar(value=self._normalize_theme(self._settings.ui_theme))
+        self.var_theme = tk.StringVar(value=self._theme_service.normalize_theme(self._settings.ui_theme))
         self.var_cpu_limit = tk.IntVar(value=self._settings.cpu_limit_percent)
         self.var_heuristics_enabled = tk.BooleanVar(value=self._settings.heuristics_enabled)
-        self.var_startup_mode = tk.StringVar(value=self._mode_label(self._settings.startup_mode))
+        self.var_startup_mode = tk.StringVar(value=mode_label(self._settings.startup_mode))
+        self.var_open_selected_mode_on_startup = tk.BooleanVar(value=self._settings.open_selected_mode_on_startup)
         self.var_exe_build_enabled = tk.BooleanVar(value=self._settings.exe_build_enabled)
         self.var_show_disabled_services = tk.BooleanVar(value=True)
         self.var_show_disabled_startup = tk.BooleanVar(value=True)
@@ -461,7 +332,7 @@ class MainWindow:
         label.configure(text=f"{title}: {pct:.0f}%", fg=fg, bg=bg, highlightbackground=c["border"], highlightcolor=c["border"])
 
     def _metric_color(self, value: float) -> str:
-        dark = self._normalize_theme(self._current_theme) == "dark"
+        dark = self._theme_service.normalize_theme(self._current_theme) == "dark"
         if value >= 80:
             return "#ff8a8a" if dark else "#c62b2b"
         if value >= 50:
@@ -471,14 +342,7 @@ class MainWindow:
         return self._theme_colors()["text"]
 
     def _metric_palette(self, value: float) -> tuple[str, str]:
-        dark = self._normalize_theme(self._current_theme) == "dark"
-        if value >= 80:
-            return ("#7e3434", "#fff1f1") if dark else ("#ffd7d7", "#5f1212")
-        if value >= 50:
-            return ("#85722b", "#fff9e6") if dark else ("#fff5c6", "#5c4b00")
-        if value >= 20:
-            return ("#2f6245", "#f4fff8") if dark else ("#e9f7e9", "#114d2d")
-        return (self._theme_colors()["panel_alt"], self._theme_colors()["text"])
+        return self._theme_service.metric_palette(self._current_theme, value)
 
     def _virtual_memory_percent_cached(self) -> float | None:
         now = time.monotonic()
@@ -740,7 +604,7 @@ class MainWindow:
         return (3, text)
 
     def _active_mode_label(self) -> str:
-        return MODE_LABELS.get(self._mode, MODE_LABELS["general"])
+        return mode_label(self._mode)
 
     def _mode_to_tab_frame(self):
         mapping = {
@@ -767,7 +631,7 @@ class MainWindow:
             self.notebook.add(tab, text=self._active_mode_label())
 
     def _open_mode_from_menu(self, mode: str) -> None:
-        normalized = self._normalize_mode(mode)
+        normalized = normalize_mode(mode)
         if normalized == self._mode:
             return
         if callable(self._switch_mode_callback):
@@ -1187,6 +1051,13 @@ class MainWindow:
         startup_combo.grid(row=row, column=1, sticky=tk.W, padx=6)
         row += 1
 
+        ttk.Checkbutton(
+            tab_general,
+            text="Открывать сразу выбранный",
+            variable=self.var_open_selected_mode_on_startup,
+        ).grid(row=row, column=0, columnspan=2, sticky=tk.W, padx=6, pady=4)
+        row += 1
+
         ttk.Checkbutton(tab_general, text="Разрешить сборку EXE", variable=self.var_exe_build_enabled).grid(row=row, column=0, columnspan=2, sticky=tk.W, padx=6, pady=4)
         row += 1
 
@@ -1271,11 +1142,12 @@ class MainWindow:
             sampling_interval_sec=int(self.var_sampling_interval.get() or 3),
             dry_run_actions=bool(self.var_dry_run.get()),
             locale_code=self.var_locale.get() or Language.RU.value,
-            ui_theme=self._normalize_theme(self.var_theme.get()),
+            ui_theme=self._theme_service.normalize_theme(self.var_theme.get()),
             cpu_limit_percent=cpu_limit,
             heuristics_enabled=bool(self.var_heuristics_enabled.get()),
             heuristic_rules={k: bool(v.get()) for k, v in getattr(self, "heuristic_vars", {}).items()},
-            startup_mode=self._normalize_mode(self._mode_id_from_label(self.var_startup_mode.get())),
+            startup_mode=normalize_mode(mode_id_from_label(self.var_startup_mode.get())),
+            open_selected_mode_on_startup=bool(self.var_open_selected_mode_on_startup.get()),
             exe_build_enabled=bool(self.var_exe_build_enabled.get()),
         )
 
@@ -1285,7 +1157,7 @@ class MainWindow:
         self._settings = settings
         self._apply_theme(settings.ui_theme)
         if settings.startup_mode != self._mode:
-            self.status_var.set(f"Настройки сохранены. Режим запуска: {MODE_LABELS.get(settings.startup_mode, 'Общий')}")
+            self.status_var.set(f"Настройки сохранены. Режим запуска: {mode_label(settings.startup_mode)}")
         else:
             self.status_var.set("Настройки сохранены")
         self._emit_event(EventLevel.INFO, "Информация", "Настройки сохранены")
@@ -1429,17 +1301,7 @@ class MainWindow:
         messagebox.showerror(title, message)
 
     def _configure_memory_tags(self, tree: ttk.Treeview) -> None:
-        c = self._theme_colors()
-        if self._normalize_theme(self._current_theme) == "light":
-            tree.tag_configure("mem_white", background=c["panel"], foreground=c["text"])
-            tree.tag_configure("mem_green", background=c["ok"], foreground=c["text"])
-            tree.tag_configure("mem_yellow", background=c["warn"], foreground=c["text"])
-            tree.tag_configure("mem_red", background=c["danger"], foreground=c["text"])
-            return
-        tree.tag_configure("mem_white", background=c["panel"], foreground=c["text"])
-        tree.tag_configure("mem_green", background="#2f6245", foreground="#f4fff8")
-        tree.tag_configure("mem_yellow", background="#85722b", foreground="#fff9e6")
-        tree.tag_configure("mem_red", background="#7e3434", foreground="#fff1f1")
+        self._theme_service.apply_memory_tags(tree, self._current_theme)
 
     @staticmethod
     def _memory_tag(memory_mb: float) -> str:
@@ -1447,7 +1309,7 @@ class MainWindow:
             return "mem_red"
         if memory_mb >= 500:
             return "mem_yellow"
-        if memory_mb >= 100 and memory_mb <= 300:
+        if memory_mb <= 300:
             return "mem_green"
         return "mem_white"
 
@@ -1587,34 +1449,6 @@ class MainWindow:
             iid = self.service_tree.insert("", tk.END, values=vals, tags=(tag,))
             self._service_index[iid] = rec
         self._restore_tree_sort(self.service_tree)
-
-    @staticmethod
-    def _service_exe_sha(path: str) -> str:
-        p = Path(path)
-        if not p.exists() or not p.is_file():
-            return ""
-        h = hashlib.sha256()
-        try:
-            with p.open("rb") as f:
-                for chunk in iter(lambda: f.read(1024 * 1024), b""):
-                    h.update(chunk)
-            return h.hexdigest()
-        except OSError:
-            return ""
-
-    @staticmethod
-    def _service_exe_sha(path: str) -> str:
-        p = Path(path)
-        if not p.exists() or not p.is_file():
-            return ""
-        h = hashlib.sha256()
-        try:
-            with p.open("rb") as f:
-                for chunk in iter(lambda: f.read(1024 * 1024), b""):
-                    h.update(chunk)
-            return h.hexdigest()
-        except OSError:
-            return ""
 
     def _fill_drivers(self, snapshot) -> None:
         self._all_drivers = list(getattr(snapshot, "driver_records", []) or [])

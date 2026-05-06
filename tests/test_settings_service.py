@@ -43,10 +43,12 @@ def test_settings_startup_mode_defaults_and_normalizes(tmp_path: Path):
 
     loaded = service.load()
     assert loaded.startup_mode == "general"
+    assert loaded.open_selected_mode_on_startup is False
 
-    service.save(AppSettings(startup_mode="startup", exe_build_enabled=False))
+    service.save(AppSettings(startup_mode="startup", open_selected_mode_on_startup=True, exe_build_enabled=False))
     loaded2 = service.load()
     assert loaded2.startup_mode == "startup"
+    assert loaded2.open_selected_mode_on_startup is True
     assert loaded2.exe_build_enabled is False
 
     service.save(AppSettings(startup_mode="unknown-mode"))
