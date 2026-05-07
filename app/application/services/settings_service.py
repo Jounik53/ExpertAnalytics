@@ -26,6 +26,11 @@ class AppSettings:
     cpu_limit_percent: int = 60
     heuristics_enabled: bool = True
     heuristic_rules: dict[str, bool] | None = None
+    heuristic_rule_definitions: list[dict[str, Any]] | None = None
+    heuristic_rule_packs: dict[str, list[str]] | None = None
+    heuristic_default_mode: str = "scan"
+    heuristic_last_selected_rules: list[str] | None = None
+    heuristic_last_selected_pack: str = "all"
     ui_theme: str = "dark"
     startup_mode: str = "general"
     open_selected_mode_on_startup: bool = False
@@ -60,6 +65,11 @@ class SettingsService:
             cpu_limit_percent=int(raw.get("cpu_limit_percent", 60)),
             heuristics_enabled=bool(raw.get("heuristics_enabled", True)),
             heuristic_rules=dict(raw.get("heuristic_rules", {})) if isinstance(raw.get("heuristic_rules", {}), dict) else {},
+            heuristic_rule_definitions=list(raw.get("heuristic_rule_definitions", [])) if isinstance(raw.get("heuristic_rule_definitions", []), list) else [],
+            heuristic_rule_packs=dict(raw.get("heuristic_rule_packs", {})) if isinstance(raw.get("heuristic_rule_packs", {}), dict) else {},
+            heuristic_default_mode=str(raw.get("heuristic_default_mode", "scan") or "scan"),
+            heuristic_last_selected_rules=list(raw.get("heuristic_last_selected_rules", [])) if isinstance(raw.get("heuristic_last_selected_rules", []), list) else [],
+            heuristic_last_selected_pack=str(raw.get("heuristic_last_selected_pack", "all") or "all"),
             ui_theme=self._normalize_theme(raw.get("ui_theme", "dark")),
             startup_mode=normalize_mode(raw.get("startup_mode", "general")),
             open_selected_mode_on_startup=bool(raw.get("open_selected_mode_on_startup", False)),
@@ -85,6 +95,11 @@ class SettingsService:
                 "cpu_limit_percent": settings.cpu_limit_percent,
                 "heuristics_enabled": settings.heuristics_enabled,
                 "heuristic_rules": settings.heuristic_rules or {},
+                "heuristic_rule_definitions": settings.heuristic_rule_definitions or [],
+                "heuristic_rule_packs": settings.heuristic_rule_packs or {},
+                "heuristic_default_mode": str(settings.heuristic_default_mode or "scan"),
+                "heuristic_last_selected_rules": settings.heuristic_last_selected_rules or [],
+                "heuristic_last_selected_pack": str(settings.heuristic_last_selected_pack or "all"),
                 "ui_theme": self._normalize_theme(settings.ui_theme),
                 "startup_mode": normalize_mode(settings.startup_mode),
                 "open_selected_mode_on_startup": settings.open_selected_mode_on_startup,

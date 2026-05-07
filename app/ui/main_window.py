@@ -70,7 +70,8 @@ class MainWindow:
 
         self._settings = self._settings_service.load()
         self._exe_builder = ExeBuildService()
-        self._heuristics = HeuristicEngine()
+        self._heuristics = HeuristicEngine(custom_rules=self._settings.heuristic_rule_definitions or [])
+        self._scan_service.configure_heuristics(self._settings.heuristic_rule_definitions or [])
         self._notifier = UINotifier()
 
         self._busy = False
@@ -204,6 +205,8 @@ class MainWindow:
         self.var_exe_build_enabled = tk.BooleanVar(value=self._settings.exe_build_enabled)
         self.var_show_disabled_services = tk.BooleanVar(value=True)
         self.var_show_disabled_startup = tk.BooleanVar(value=True)
+        self.var_heur_mode = tk.StringVar(value=self._settings.heuristic_default_mode or "scan")
+        self.var_heur_pack = tk.StringVar(value=self._settings.heuristic_last_selected_pack or "all")
 
         self.var_search = tk.StringVar(value="")
         self.var_level = tk.StringVar(value="all")
@@ -1127,6 +1130,32 @@ class MainWindow:
             self.heuristic_vars[rule.rule_id] = var
             ttk.Checkbutton(tab_heur, text=f"{rule.title} ({rule.rule_id})", variable=var).pack(anchor=tk.W, padx=8, pady=2)
 
+        editor = ttk.LabelFrame(tab_heur, text="Правила (JSON DSL)")
+        editor.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 4))
+        self.heur_rules_text = tk.Text(editor, height=14)
+        self.heur_rules_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        self._attach_scrollbars(self.heur_rules_text)
+        current_defs = self._settings.heuristic_rule_definitions or []
+        if not current_defs:
+            current_defs = self._heuristics.definitions_payload()
+        self.heur_rules_text.insert(tk.END, json.dumps(current_defs, ensure_ascii=False, indent=2))
+
+        editor_btn = ttk.Frame(tab_heur)
+        editor_btn.pack(fill=tk.X, padx=8, pady=(0, 4))
+        ttk.Button(editor_btn, text="Проверить правила", command=self.action_validate_heur_rules).pack(side=tk.LEFT, padx=2)
+        ttk.Button(editor_btn, text="Сбросить на встроенные", command=self.action_reset_heur_rules).pack(side=tk.LEFT, padx=2)
+        ttk.Button(editor_btn, text="Применить правила", command=self.action_apply_heur_rules).pack(side=tk.LEFT, padx=2)
+
+        run_box = ttk.LabelFrame(tab_heur, text="Режим эвристики")
+        run_box.pack(fill=tk.X, padx=8, pady=(4, 8))
+        ttk.Label(run_box, text="Применение:").pack(side=tk.LEFT, padx=(6, 2))
+        ttk.Combobox(run_box, textvariable=self.var_heur_mode, values=["scan", "heuristic"], state="readonly", width=12).pack(side=tk.LEFT, padx=2)
+        ttk.Label(run_box, text="Пакет:").pack(side=tk.LEFT, padx=(10, 2))
+        pack_names = list((self._settings.heuristic_rule_packs or self._heuristics.default_rule_packs()).keys())
+        ttk.Combobox(run_box, textvariable=self.var_heur_pack, values=pack_names, state="readonly", width=22).pack(side=tk.LEFT, padx=2)
+        ttk.Button(run_box, text="Проверить процесс", command=self.action_heuristic_check_process).pack(side=tk.LEFT, padx=4)
+        ttk.Button(run_box, text="Проверить файл", command=self.action_heuristic_check_file).pack(side=tk.LEFT, padx=4)
+
         bottom = ttk.Frame(self.frame_settings)
         bottom.pack(fill=tk.X, padx=10, pady=(0, 10))
         ttk.Button(bottom, text="Сохранить настройки", command=self.save_settings).pack(side=tk.LEFT)
@@ -1167,6 +1196,13 @@ class MainWindow:
 
     def _collect_settings(self) -> AppSettings:
         cpu_limit = max(10, min(100, int(self.var_cpu_limit.get() or 60)))
+        packs = self._settings.heuristic_rule_packs or self._heuristics.default_rule_packs()
+        current_text = ""
+        if hasattr(self, "heur_rules_text"):
+            current_text = self.heur_rules_text.get("1.0", tk.END)
+        raw_defs, parse_diags = HeuristicEngine.parse_rules_text(current_text)
+        if parse_diags:
+            raw_defs = self._settings.heuristic_rule_definitions or []
         return AppSettings(
             vt_api_key=self.var_vt_key.get().strip(),
             process_high_mb=int(self.var_high.get() or 900),
@@ -1185,6 +1221,11 @@ class MainWindow:
             cpu_limit_percent=cpu_limit,
             heuristics_enabled=bool(self.var_heuristics_enabled.get()),
             heuristic_rules={k: bool(v.get()) for k, v in getattr(self, "heuristic_vars", {}).items()},
+            heuristic_rule_definitions=raw_defs,
+            heuristic_rule_packs=packs,
+            heuristic_default_mode=str(self.var_heur_mode.get() or "scan"),
+            heuristic_last_selected_rules=[k for k, v in getattr(self, "heuristic_vars", {}).items() if bool(v.get())],
+            heuristic_last_selected_pack=str(self.var_heur_pack.get() or "all"),
             startup_mode=normalize_mode(mode_id_from_label(self.var_startup_mode.get())),
             open_selected_mode_on_startup=bool(self.var_open_selected_mode_on_startup.get()),
             exe_build_enabled=bool(self.var_exe_build_enabled.get()),
@@ -1192,6 +1233,8 @@ class MainWindow:
 
     def save_settings(self) -> None:
         settings = self._collect_settings()
+        self._heuristics = HeuristicEngine(custom_rules=settings.heuristic_rule_definitions or [])
+        self._scan_service.configure_heuristics(settings.heuristic_rule_definitions or [])
         self._settings_service.save(settings)
         self._settings = settings
         self._apply_theme(settings.ui_theme)
@@ -1200,6 +1243,105 @@ class MainWindow:
         else:
             self.status_var.set("Настройки сохранены")
         self._emit_event(EventLevel.INFO, "Информация", "Настройки сохранены")
+
+    def action_validate_heur_rules(self) -> None:
+        text = self.heur_rules_text.get("1.0", tk.END)
+        payload, parse_diags = HeuristicEngine.parse_rules_text(text)
+        if parse_diags:
+            msg = "\n".join(d.format_like_compiler() for d in parse_diags)
+            self.process_details.delete("1.0", tk.END)
+            self.process_details.insert(tk.END, msg)
+            self.status_var.set("Ошибка синтаксиса правил")
+            return
+        eng = HeuristicEngine()
+        sem_diags = eng.validate_raw_rules(payload)
+        if sem_diags:
+            msg = "\n".join(d.format_like_compiler() for d in sem_diags)
+            self.process_details.delete("1.0", tk.END)
+            self.process_details.insert(tk.END, msg)
+            self.status_var.set("Ошибка валидации правил")
+            return
+        self.process_details.delete("1.0", tk.END)
+        self.process_details.insert(tk.END, "OK: правила валидны")
+        self.status_var.set("Правила валидны")
+
+    def action_reset_heur_rules(self) -> None:
+        builtin = HeuristicEngine().definitions_payload()
+        self.heur_rules_text.delete("1.0", tk.END)
+        self.heur_rules_text.insert(tk.END, json.dumps(builtin, ensure_ascii=False, indent=2))
+        self.status_var.set("Правила сброшены на встроенные")
+
+    def action_apply_heur_rules(self) -> None:
+        text = self.heur_rules_text.get("1.0", tk.END)
+        payload, parse_diags = HeuristicEngine.parse_rules_text(text)
+        if parse_diags:
+            self.process_details.delete("1.0", tk.END)
+            self.process_details.insert(tk.END, "\n".join(d.format_like_compiler() for d in parse_diags))
+            self.status_var.set("Не удалось применить правила")
+            return
+        probe = HeuristicEngine()
+        sem_diags = probe.validate_raw_rules(payload)
+        if sem_diags:
+            self.process_details.delete("1.0", tk.END)
+            self.process_details.insert(tk.END, "\n".join(d.format_like_compiler() for d in sem_diags))
+            self.status_var.set("Не удалось применить правила")
+            return
+        self._heuristics = HeuristicEngine(custom_rules=payload)
+        self._scan_service.configure_heuristics(payload)
+        if hasattr(self, "heuristic_vars"):
+            for child in list(self.heuristic_vars.keys()):
+                if child not in self._heuristics.schema():
+                    self.heuristic_vars.pop(child, None)
+            for rid, enabled in self._heuristics.schema().items():
+                if rid not in self.heuristic_vars:
+                    self.heuristic_vars[rid] = tk.BooleanVar(value=enabled)
+        self.status_var.set("Правила применены")
+
+    def _selected_rule_ids_for_manual(self) -> set[str] | None:
+        pack_name = str(self.var_heur_pack.get() or "all")
+        packs = self._settings.heuristic_rule_packs or self._heuristics.default_rule_packs()
+        if pack_name in packs and packs.get(pack_name):
+            return set(packs.get(pack_name, []))
+        selected = {rid for rid, var in self.heuristic_vars.items() if bool(var.get())}
+        return selected if selected else None
+
+    def action_heuristic_check_process(self) -> None:
+        rec = self._selected_process(silent=True)
+        if rec is None:
+            self.status_var.set("Выберите процесс")
+            return
+        selected_ids = self._selected_rule_ids_for_manual()
+        result = self._heuristics.evaluate_one(
+            rec,
+            enabled={k: bool(v.get()) for k, v in self.heuristic_vars.items()},
+            mode="heuristic",
+            selected_rule_ids=selected_ids,
+        )
+        rec.heuristic_score = result.score
+        rec.heuristic_hits = result.hits
+        self._on_process_select(None)
+        self.status_var.set(f"Эвристика процесса: score={result.score}, hits={len(result.hits)}")
+
+    def action_heuristic_check_file(self) -> None:
+        path = filedialog.askopenfilename(title="Выберите файл для эвристической проверки")
+        if not path:
+            return
+        selected_ids = self._selected_rule_ids_for_manual()
+        result = self._heuristics.evaluate_file(
+            path,
+            enabled={k: bool(v.get()) for k, v in self.heuristic_vars.items()},
+            mode="heuristic",
+            selected_rule_ids=selected_ids,
+        )
+        payload = {
+            "file": path,
+            "score": result.score,
+            "hits": result.hits,
+            "matches": [m.__dict__ for m in result.matches],
+        }
+        self.process_details.delete("1.0", tk.END)
+        self.process_details.insert(tk.END, json.dumps(payload, ensure_ascii=False, indent=2))
+        self.status_var.set(f"Эвристика файла: score={result.score}, hits={len(result.hits)}")
 
     def scan(self) -> None:
         if self._busy:
@@ -2265,6 +2407,8 @@ class MainWindow:
                     score = 0
                     hits: list[str] = []
                     for rule in self._heuristics.rules:
+                        if "scan" not in rule.applies_to:
+                            continue
                         if not enabled_map.get(rule.rule_id, True):
                             continue
                         delta, msg = rule.evaluate(rec)

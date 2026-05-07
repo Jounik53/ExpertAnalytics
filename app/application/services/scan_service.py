@@ -45,6 +45,12 @@ class ScanService:
         self._sampler = sampler
         self._heuristics = HeuristicEngine()
 
+    def configure_heuristics(self, custom_rules: list[dict] | None = None) -> None:
+        self._heuristics = HeuristicEngine(custom_rules=custom_rules or [])
+
+    def heuristics_engine(self) -> HeuristicEngine:
+        return self._heuristics
+
     def full_scan(
         self,
         high_mb: int,
@@ -209,7 +215,7 @@ class ScanService:
         if heuristics_enabled and process_records:
             _step("Эвристический анализ", 1)
             enabled_map = heuristic_rules or self._heuristics.schema()
-            enabled_rules = [rule for rule in self._heuristics.rules if enabled_map.get(rule.rule_id, True)]
+            enabled_rules = [rule for rule in self._heuristics.rules if enabled_map.get(rule.rule_id, True) and "scan" in rule.applies_to]
             checks_done = 0
             for rec in process_records:
                 score = 0
