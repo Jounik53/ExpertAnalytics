@@ -25,7 +25,7 @@ from app.application.services.log_analyzer_service import LogAnalyzerService
 from app.application.services.report_insight_service import ReportInsightService
 from app.application.services.scan_service import ScanService
 from app.application.services.settings_service import AppSettings, SettingsService
-from app.domain.entities import ProcessRecord, ServiceRecord, StartupEntry, DriverRecord
+from app.domain.entities import ActionResult, ProcessRecord, ServiceRecord, StartupEntry, DriverRecord
 from app.domain.ports import ReportRepositoryPort
 from app.ui.event_store import UIEventStore
 from app.ui.i18n import I18n
@@ -846,6 +846,7 @@ class MainWindow:
             startup_grid,
             columns=("category", "name", "command", "enabled", "location"),
             show="headings",
+            selectmode="extended",
         )
         headers = {
             "category": "Категория",
@@ -868,6 +869,8 @@ class MainWindow:
         self.startup_tree.pack(fill=tk.BOTH, expand=True)
         self._attach_scrollbars(self.startup_tree)
         self.startup_tree.bind("<Button-3>", self._open_startup_menu)
+        self.startup_tree.bind("<Delete>", self._on_startup_delete)
+        self.startup_tree.bind("<Escape>", self._on_startup_escape)
 
         b = ttk.Frame(self.frame_startup)
         b.pack(fill=tk.X, padx=10, pady=(0, 8))
@@ -881,6 +884,7 @@ class MainWindow:
         ttk.Button(b, text="Отключить", command=self.action_disable_startup).pack(side=tk.LEFT, padx=4)
         ttk.Button(b, text="Удалить", command=self.action_remove_startup).pack(side=tk.LEFT, padx=4)
         ttk.Button(b, text="Открыть в Проводнике", command=self.action_open_startup_path).pack(side=tk.LEFT, padx=4)
+        ttk.Label(b, text="Горячие клавиши: Delete - удалить, Esc - отключить").pack(side=tk.RIGHT, padx=4)
 
     def _build_services_tab(self) -> None:
         self.service_tree = ttk.Treeview(
@@ -2090,6 +2094,15 @@ class MainWindow:
                 return data[1]  # type: ignore[return-value]
         return None
 
+    def _selected_startup_entries(self) -> list[StartupEntry]:
+        selection = self.startup_tree.selection()
+        if selection:
+            return [self._startup_index[iid] for iid in selection if iid in self._startup_index]
+        single = self._selected_startup()
+        if single is None:
+            return []
+        return [single]
+
     def _selected_service(self) -> ServiceRecord | None:
         selection = self.service_tree.selection()
         if selection:
@@ -2198,10 +2211,20 @@ class MainWindow:
         if result.ok:
             self._emit_event(EventLevel.INFO, "Информация", result.message)
             self._emit_event(EventLevel.INFO, "Rollback", f"Точка отката зафиксирована для действия: {result.message}")
-            messagebox.showinfo("Действие", result.message)
         else:
             self._emit_event(EventLevel.ERROR, "Ошибка", result.message)
-            messagebox.showerror("Действие", result.message)
+
+    def _show_batch_startup_result(self, action_label: str, total: int, success: int, failed_messages: list[str]) -> None:
+        failed = max(0, total - success)
+        base = f"{action_label}: выполнено {success} из {total}"
+        if failed <= 0:
+            self._show_action_result(ActionResult(ok=True, message=base))
+            return
+        preview = "; ".join(msg for msg in failed_messages[:3] if msg)
+        msg = f"{base}, ошибок: {failed}"
+        if preview:
+            msg = f"{msg} | {preview}"
+        self._show_action_result(ActionResult(ok=False, message=msg))
 
     def action_terminate_process(self) -> None:
         rec = self._selected_process()
@@ -2445,20 +2468,46 @@ class MainWindow:
             threading.Thread(target=_vt_worker, daemon=True).start()
 
     def action_disable_startup(self) -> None:
-        rec = self._selected_startup()
-        if rec:
+        records = self._selected_startup_entries()
+        if not records:
+            self.status_var.set("Выберите запись автозагрузки")
+            return
+        ok_count = 0
+        failed_messages: list[str] = []
+        for rec in records:
             result = self._action_service.disable_startup(rec)
-            self._show_action_result(result)
             if result.ok:
-                self.action_refresh_startup()
+                ok_count += 1
+            else:
+                failed_messages.append(f"{rec.name}: {result.message}")
+        self._show_batch_startup_result("Отключение автозагрузки", len(records), ok_count, failed_messages)
+        if ok_count > 0:
+            self.action_refresh_startup(silent=True)
 
     def action_remove_startup(self) -> None:
-        rec = self._selected_startup()
-        if rec:
+        records = self._selected_startup_entries()
+        if not records:
+            self.status_var.set("Выберите запись автозагрузки")
+            return
+        ok_count = 0
+        failed_messages: list[str] = []
+        for rec in records:
             result = self._action_service.remove_startup(rec)
-            self._show_action_result(result)
             if result.ok:
-                self.action_refresh_startup()
+                ok_count += 1
+            else:
+                failed_messages.append(f"{rec.name}: {result.message}")
+        self._show_batch_startup_result("Удаление автозагрузки", len(records), ok_count, failed_messages)
+        if ok_count > 0:
+            self.action_refresh_startup(silent=True)
+
+    def _on_startup_delete(self, _event=None):
+        self.action_remove_startup()
+        return "break"
+
+    def _on_startup_escape(self, _event=None):
+        self.action_disable_startup()
+        return "break"
 
     def action_refresh_startup(self, silent: bool = False) -> None:
         if self._warmup_is_running("Обновление автозагрузки"):

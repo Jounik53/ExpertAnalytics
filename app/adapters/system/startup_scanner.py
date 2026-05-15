@@ -62,7 +62,26 @@ class RegistryStartupScanner(StartupScannerPort):
                     f"Автозагрузка: {rec.name} | состояние: {'включена' if rec.enabled else 'отключена'} | источник: {rec.location} | команда: {rec.command}"
                 )
 
-        return entries
+        win32_entries = self._win32_startup_command_entries()
+        entries.extend(win32_entries)
+        if item_callback is not None:
+            for rec in win32_entries:
+                item_callback(
+                    f"Автозагрузка: {rec.name} | состояние: {'включена' if rec.enabled else 'отключена'} | источник: {rec.location} | команда: {rec.command}"
+                )
+        return self._deduplicate_entries(entries)
+
+    @staticmethod
+    def _deduplicate_entries(entries: list[StartupEntry]) -> list[StartupEntry]:
+        seen: set[tuple[str, str, str]] = set()
+        result: list[StartupEntry] = []
+        for rec in entries:
+            key = ((rec.name or "").strip().lower(), (rec.command or "").strip().lower(), (rec.location or "").strip().lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(rec)
+        return result
 
     def _registry_entries(self, item_callback=None) -> list[StartupEntry]:
         result: list[StartupEntry] = []
@@ -266,6 +285,41 @@ class RegistryStartupScanner(StartupScannerPort):
                     location=f"WMIBinding:{binding}",
                     enabled=True,
                     category="WMI",
+                )
+            )
+        return result
+
+    def _win32_startup_command_entries(self) -> list[StartupEntry]:
+        script = (
+            "$items = Get-CimInstance -ClassName Win32_StartupCommand -ErrorAction SilentlyContinue;"
+            "if (-not $items) { @() | ConvertTo-Json -Compress; exit 0 };"
+            "$items | ForEach-Object {"
+            "  [PSCustomObject]@{"
+            "    Name = [string]$_.Name;"
+            "    Command = [string]$_.Command;"
+            "    Location = [string]$_.Location;"
+            "    User = [string]$_.User"
+            "  }"
+            "} | ConvertTo-Json -Compress"
+        )
+        result: list[StartupEntry] = []
+        for row in self._run_powershell_json(script):
+            name = str(row.get("Name") or "").strip()
+            command = str(row.get("Command") or "").strip()
+            location = str(row.get("Location") or "").strip()
+            user = str(row.get("User") or "").strip()
+            if not name and not command:
+                continue
+            loc = f"Win32Startup:{location}" if location else "Win32Startup"
+            if user:
+                loc = f"{loc};User={user}"
+            result.append(
+                StartupEntry(
+                    name=name or command,
+                    command=command,
+                    location=loc,
+                    enabled=True,
+                    category="Application",
                 )
             )
         return result
